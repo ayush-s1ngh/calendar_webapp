@@ -41,7 +41,6 @@ import {
   isDuplicateReminder,
   getReminderComparisonKey,
   validateRelativeReminder,
-  buildReminderPayloadFromForm,
   ApiReminder,
   minutesToTimedPreset,
   NotificationType,
@@ -51,15 +50,15 @@ import {
 
 export function EditEventDialog({
   open,
-  onOpenChange,
+  onOpenChangeAction,
   event,
-  onUpdated,
+  onUpdatedAction,
   openManageInitially = false,
 }: {
   open: boolean
-  onOpenChange: (v: boolean) => void
+  onOpenChangeAction: (v: boolean) => void
   event: EventData | null
-  onUpdated?: () => void
+  onUpdatedAction?: () => void
   openManageInitially?: boolean
 }) {
   const categories = categoryStore((s) => s.categories)
@@ -436,8 +435,8 @@ export function EditEventDialog({
         window.dispatchEvent(new CustomEvent("reminders:refresh"))
       } catch {}
 
-      onOpenChange(false)
-      onUpdated?.()
+      onOpenChangeAction(false)
+      onUpdatedAction?.()
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, "Failed to update event"))
     }
@@ -445,10 +444,8 @@ export function EditEventDialog({
 
   if (!event) return null
 
-  const addDisabled = reminders.length >= MAX_REMINDERS_PER_EVENT
-
   return (
-    <Dialog open={open} onOpenChange={(v) => !isSubmitting && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={(v) => !isSubmitting && onOpenChangeAction(v)}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Event</DialogTitle>
@@ -554,7 +551,7 @@ export function EditEventDialog({
                             mode="single"
                             selected={field.value}
                             onSelect={(date) => date && field.onChange(date)}
-                            initialFocus
+                            autoFocus={true}
                           />
                         </PopoverContent>
                       </Popover>
@@ -602,7 +599,7 @@ export function EditEventDialog({
                             mode="single"
                             selected={field.value}
                             onSelect={(date) => date && field.onChange(date)}
-                            initialFocus
+                            autoFocus={true}
                           />
                         </PopoverContent>
                       </Popover>
@@ -653,7 +650,7 @@ export function EditEventDialog({
                           mode="single"
                           selected={field.value}
                           onSelect={(date) => date && field.onChange(date)}
-                          initialFocus
+                          autoFocus={true}
                         />
                       </PopoverContent>
                     </Popover>
@@ -684,7 +681,7 @@ export function EditEventDialog({
                           mode="single"
                           selected={field.value}
                           onSelect={(date) => date && field.onChange(date)}
-                          initialFocus
+                          autoFocus={true}
                         />
                       </PopoverContent>
                     </Popover>
@@ -741,8 +738,8 @@ export function EditEventDialog({
                       value={r}
                       isAllDay={isAllDay}
                       eventLocalStart={eventLocalStart}
-                      onChange={(v) => updateReminderAt(idx, v)}
-                      onDelete={() => deleteReminderAt(idx)}
+                      onChangeAction={(v) => updateReminderAt(idx, v)}
+                      onDeleteAction={() => deleteReminderAt(idx)}
                     />
                   ))}
                 </div>
@@ -751,7 +748,7 @@ export function EditEventDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChangeAction(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>

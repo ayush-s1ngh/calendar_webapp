@@ -28,16 +28,16 @@ import { EventData, getErrorMessage } from "./event-utils"
 
 export function ViewEventDialog({
   open,
-  onOpenChange,
+  onOpenChangeAction,
   event,
-  onEditClick,
-  onDeleted,
+  onEditClickAction,
+  onDeletedAction,
 }: {
   open: boolean
-  onOpenChange: (v: boolean) => void
+  onOpenChangeAction: (v: boolean) => void
   event: EventData | null
-  onEditClick?: () => void
-  onDeleted?: () => void
+  onEditClickAction?: () => void
+  onDeletedAction?: () => void
 }) {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
@@ -52,9 +52,9 @@ export function ViewEventDialog({
       try {
         window.dispatchEvent(new CustomEvent("reminders:refresh"))
       } catch {}
-      onOpenChange(false)
+      onOpenChangeAction(false)
       setDeleteOpen(false)
-      onDeleted?.()
+      onDeletedAction?.()
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, "Failed to delete event"))
     } finally {
@@ -74,7 +74,7 @@ export function ViewEventDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={onOpenChangeAction}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-xl">{event.title}</DialogTitle>
@@ -155,11 +155,11 @@ export function ViewEventDialog({
             )}
           </div>
           <DialogFooter className="justify-between">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" onClick={() => onOpenChangeAction(false)}>
               Close
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={onEditClick}>
+              <Button variant="outline" onClick={onEditClickAction}>
                 <Pencil className="size-4" />
                 Edit
               </Button>

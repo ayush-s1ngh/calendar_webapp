@@ -47,16 +47,16 @@ import {
 
 export function CreateEventDialog({
   open,
-  onOpenChange,
-  onCreated,
+  onOpenChangeAction,
+  onCreatedAction,
   initialDate,
   initialStart,
   initialEnd,
   initialAllDay = false,
 }: {
   open: boolean
-  onOpenChange: (v: boolean) => void
-  onCreated?: () => void
+  onOpenChangeAction: (v: boolean) => void
+  onCreatedAction?: () => void
   initialDate?: Date
   initialStart?: Date
   initialEnd?: Date
@@ -279,8 +279,8 @@ export function CreateEventDialog({
         window.dispatchEvent(new CustomEvent("reminders:refresh"))
       } catch {}
       toast.success("Event created")
-      onOpenChange(false)
-      onCreated?.()
+      onOpenChangeAction(false)
+      onCreatedAction?.()
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, "Failed to create event"))
     }
@@ -289,7 +289,7 @@ export function CreateEventDialog({
   const addDisabled = reminders.length >= MAX_REMINDERS_PER_EVENT
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !isSubmitting && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={(v) => !isSubmitting && onOpenChangeAction(v)}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Event</DialogTitle>
@@ -389,7 +389,7 @@ export function CreateEventDialog({
                             mode="single"
                             selected={field.value}
                             onSelect={(date) => date && field.onChange(date)}
-                            initialFocus
+                            autoFocus={true}
                           />
                         </PopoverContent>
                       </Popover>
@@ -437,7 +437,7 @@ export function CreateEventDialog({
                             mode="single"
                             selected={field.value}
                             onSelect={(date) => date && field.onChange(date)}
-                            initialFocus
+                            autoFocus={true}
                           />
                         </PopoverContent>
                       </Popover>
@@ -488,7 +488,7 @@ export function CreateEventDialog({
                           mode="single"
                           selected={field.value}
                           onSelect={(date) => date && field.onChange(date)}
-                          initialFocus
+                          autoFocus={true}
                         />
                       </PopoverContent>
                     </Popover>
@@ -519,7 +519,7 @@ export function CreateEventDialog({
                           mode="single"
                           selected={field.value}
                           onSelect={(date) => date && field.onChange(date)}
-                          initialFocus
+                          autoFocus={true}
                         />
                       </PopoverContent>
                     </Popover>
@@ -570,8 +570,8 @@ export function CreateEventDialog({
                   value={r}
                   isAllDay={isAllDay}
                   eventLocalStart={eventLocalStart}
-                  onChange={(v) => updateReminderAt(idx, v)}
-                  onDelete={() => deleteReminderAt(idx)}
+                  onChangeAction={(v) => updateReminderAt(idx, v)}
+                  onDeleteAction={() => deleteReminderAt(idx)}
                   expandWhenOnDesktop // NEW: let "When" fill remaining space (md+)
                 />
               ))}
@@ -579,7 +579,7 @@ export function CreateEventDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChangeAction(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
