@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { addDays, format, isSameDay } from "date-fns"
-import { Calendar as CalendarIcon, ChevronDown, ChevronUp, Clock, Mail, Pencil, Smartphone, MessageCircle } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronDown, ChevronUp, Clock, Mail, Smartphone, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -155,10 +155,6 @@ export function SidebarReminders() {
     setActiveEvent(ev)
     setViewOpen(true)
   }
-  function openEdit(ev: EventData) {
-    setActiveEvent(ev)
-    setEditOpen(true)
-  }
 
   function primaryCategoryColor(ev: EventData) {
     const color = ev.categories?.[0]?.color
@@ -262,25 +258,6 @@ export function SidebarReminders() {
                           aria-label={`Open event ${g.event.title}`}
                           title="Open event"
                         >
-                          {/* Top row: Title + edit icon */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="text-sm font-medium truncate pr-8">{g.event.title}</div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon-sm"
-                              className="ml-auto"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                openEdit(g.event)
-                              }}
-                              aria-label="Edit Event"
-                              title="Edit Event"
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                          </div>
-
                           {/* Second row: Event Date (left) | Event Time (right) */}
                           <div className="text-xs text-muted-foreground mt-1 flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1">
@@ -318,13 +295,13 @@ export function SidebarReminders() {
       {/* View Event Dialog */}
       <ViewEventDialog
         open={viewOpen}
-        onOpenChange={setViewOpen}
+        onOpenChangeAction={setViewOpen}
         event={activeEvent}
-        onEditClick={() => {
+        onEditClickAction={() => {
           setViewOpen(false)
           setTimeout(() => setEditOpen(true), 10)
         }}
-        onDeleted={() => {
+        onDeletedAction={() => {
           try {
             window.dispatchEvent(new CustomEvent("reminders:refresh"))
           } catch {}
@@ -334,9 +311,9 @@ export function SidebarReminders() {
       {/* Edit Event Dialog */}
       <EditEventDialog
         open={editOpen}
-        onOpenChange={setEditOpen}
+        onOpenChangeAction={setEditOpen}
         event={activeEvent}
-        onUpdated={() => {
+        onUpdatedAction={() => {
           try {
             window.dispatchEvent(new CustomEvent("reminders:refresh"))
           } catch {}

@@ -166,7 +166,7 @@ export function SidebarFilters() {
 
       <CategoryManagerDialog
         open={managerOpen}
-        onOpenChange={setManagerOpen}
+        onOpenChangeAction={setManagerOpen}
       />
     </>
   )
