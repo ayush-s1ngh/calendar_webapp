@@ -22,4 +22,5 @@
 *.sqlite
 *.db
 
-.docs/
+
+/docs/
