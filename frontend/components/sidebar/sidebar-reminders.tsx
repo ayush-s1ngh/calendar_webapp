@@ -258,6 +258,10 @@ export function SidebarReminders() {
                           aria-label={`Open event ${g.event.title}`}
                           title="Open event"
                         >
+                        {/* Top row: Title + edit icon */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="text-sm font-medium truncate pr-8">{g.event.title}</div>
+                          </div>
                           {/* Second row: Event Date (left) | Event Time (right) */}
                           <div className="text-xs text-muted-foreground mt-1 flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1">
