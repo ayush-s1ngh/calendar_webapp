@@ -17,6 +17,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { SidebarFilters } from "@/components/sidebar/sidebar-filters"
+import { SidebarReminders } from "@/components/sidebar/sidebar-reminders"
 
 // This is sample data.
 const data = {
@@ -52,6 +53,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader />
       <SidebarContent>
         <SidebarFilters />
+        <SidebarReminders />
         <SidebarMain items={data.sidebarMain} />
       </SidebarContent>
       <SidebarFooter>

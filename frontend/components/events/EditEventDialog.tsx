@@ -54,11 +54,13 @@ export function EditEventDialog({
   onOpenChange,
   event,
   onUpdated,
+  openManageInitially = false, // NEW
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   event: EventData | null
   onUpdated?: () => void
+  openManageInitially?: boolean
 }) {
   const categories = categoryStore((s) => s.categories)
 
@@ -77,12 +79,13 @@ export function EditEventDialog({
   const [reminders, setReminders] = React.useState<ReminderFormValue[]>([])
   const [originalApiReminders, setOriginalApiReminders] = React.useState<ApiReminder[]>([])
   const [remindersLoading, setRemindersLoading] = React.useState(false)
-  const [manageOpen, setManageOpen] = React.useState(false)
+  const [manageOpen, setManageOpen] = React.useState(openManageInitially) // UPDATED
 
   // Load event details into form and fetch reminders
   React.useEffect(() => {
     async function init() {
       if (!open || !event) return
+        setManageOpen(openManageInitially)
       const startDate = utcIsoToLocalDate(event.start_datetime)
       const endDate = event.end_datetime
         ? utcIsoToLocalDate(event.end_datetime)
@@ -135,7 +138,7 @@ export function EditEventDialog({
       }
     }
     void init()
-  }, [open, event, reset])
+  }, [open, event, reset, openManageInitially])
 
   const isAllDay = watch("is_all_day")
   const startDate = watch("start_date")
@@ -427,6 +430,11 @@ export function EditEventDialog({
       } else {
         toast.success("Event updated")
       }
+
+      // notify sidebar reminders to refresh on any update
+      try {
+        window.dispatchEvent(new CustomEvent("reminders:refresh"))
+      } catch {}
 
       onOpenChange(false)
       onUpdated?.()

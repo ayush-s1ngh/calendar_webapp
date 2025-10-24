@@ -293,3 +293,20 @@ export function roundToNearestFiveMinutes(date: Date): Date {
   d.setMinutes(rounded >= 60 ? 55 : rounded, 0, 0)
   return d
 }
+
+/**
+ * Compute the local trigger Date for a reminder given the event start (UTC ISO).
+ * - For relative reminders: eventStart - minutes_before
+ * - For absolute reminders: new Date(reminder_time)
+ */
+export function getReminderLocalTriggerDate(reminder: ApiReminder, eventStartUtcIso: string): Date {
+  if (reminder.is_relative && typeof reminder.minutes_before === "number") {
+    const eventLocal = new Date(eventStartUtcIso)
+    return addMinutes(eventLocal, -Math.max(0, Math.floor(reminder.minutes_before)))
+  }
+  if (reminder.reminder_time) {
+    return new Date(reminder.reminder_time)
+  }
+  // Fallback: just use event start if shape is unexpected
+  return new Date(eventStartUtcIso)
+}
