@@ -46,6 +46,9 @@ import {
   NotificationType,
   presetToMinutes,
   calculateAbsoluteReminderTime,
+  detectAllDayPresetFromAbsolute,
+  detectAllDayPresetFromMinutesBefore,
+  allDayPresetToMinutesBefore,
 } from "@/components/reminders"
 
 export function EditEventDialog({
@@ -84,7 +87,7 @@ export function EditEventDialog({
   React.useEffect(() => {
     async function init() {
       if (!open || !event) return
-        setManageOpen(openManageInitially)
+      setManageOpen(openManageInitially)
       const startDate = utcIsoToLocalDate(event.start_datetime)
       const endDate = event.end_datetime
         ? utcIsoToLocalDate(event.end_datetime)
@@ -111,6 +114,16 @@ export function EditEventDialog({
         category_ids: event.categories?.map((c) => c.id) || [],
       })
 
+      // Compute local event start for mapping presets and minutes
+      const eventLocalStartForMapping = (() => {
+        if (isAllDay) {
+          const d = new Date(startDate)
+          d.setHours(0, 0, 0, 0)
+          return d
+        }
+        return new Date(startDate)
+      })()
+
       // fetch reminders for this event
       setRemindersLoading(true)
       try {
@@ -127,7 +140,7 @@ export function EditEventDialog({
 
         const apiRems = extractReminders(res?.data)
         setOriginalApiReminders(apiRems)
-        const mapped = mapApiRemindersToForm(apiRems, isAllDay)
+        const mapped = mapApiRemindersToForm(apiRems, isAllDay, eventLocalStartForMapping)
         setReminders(mapped)
       } catch {
         setOriginalApiReminders([])
@@ -176,18 +189,55 @@ export function EditEventDialog({
     }
   }, [isAllDay])
 
-  function mapApiRemindersToForm(apiRems: ApiReminder[], isAllDayEvent: boolean): ReminderFormValue[] {
+  function mapApiRemindersToForm(
+    apiRems: ApiReminder[],
+    isAllDayEvent: boolean,
+    eventLocalStartForMapping: Date
+  ): ReminderFormValue[] {
     return apiRems.map((rem) => {
       if (isAllDayEvent) {
-        if (rem.reminder_time) {
+        // Prefer mapping to preset if recognizable
+        if (rem.is_relative && typeof rem.minutes_before === "number") {
+          const m = Math.max(0, Math.floor(rem.minutes_before))
+          const p = detectAllDayPresetFromMinutesBefore(m)
+          if (p) {
+            return {
+              id: rem.id,
+              mode: "preset",
+              preset: p,
+              notificationType: rem.notification_type,
+            }
+          }
+          // Fall back: show as custom absolute derived from minutes
+          const abs = new Date(eventLocalStartForMapping.getTime() - m * 60000)
           return {
             id: rem.id,
             mode: "custom",
-            customDateTime: new Date(rem.reminder_time),
+            customDateTime: abs,
             notificationType: rem.notification_type,
           }
         }
-        // Fallback default if shape unexpected
+
+        if (rem.reminder_time) {
+          const absLocal = new Date(rem.reminder_time)
+          const preset = detectAllDayPresetFromAbsolute(absLocal, eventLocalStartForMapping)
+          if (preset) {
+            return {
+              id: rem.id,
+              mode: "preset",
+              preset,
+              notificationType: rem.notification_type,
+            }
+          }
+          return {
+            id: rem.id,
+            mode: "custom",
+            customDateTime: absLocal,
+            notificationType: rem.notification_type,
+          }
+        }
+
+        // Fallback default
         return {
           id: rem.id,
           mode: "preset",
@@ -293,11 +343,26 @@ export function EditEventDialog({
     opts: { isAllDay: boolean; eventLocalStart: Date }
   ): { minutes_before?: number; reminder_time?: string; notification_type: NotificationType } {
     if (opts.isAllDay) {
-      const iso =
-        r.mode === "custom" && r.customDateTime
-          ? localDateToUtcIso(r.customDateTime)
-          : calculateAbsoluteReminderTime(opts.eventLocalStart, (r.preset as any) || "day_1_before_9am")
-      return { reminder_time: iso, notification_type: r.notificationType }
+      if (r.mode === "custom" && r.customDateTime) {
+        const dt = new Date(r.customDateTime)
+        if (dt.getTime() < opts.eventLocalStart.getTime()) {
+          const diffMin = Math.max(
+            0,
+            Math.floor((opts.eventLocalStart.getTime() - dt.getTime()) / 60000)
+          )
+          return { minutes_before: diffMin, notification_type: r.notificationType }
+        }
+        return { reminder_time: localDateToUtcIso(dt), notification_type: r.notificationType }
+      }
+      const preset = (r.preset as any) || "day_1_before_9am"
+      if (preset === "same_day_9am") {
+        return {
+          reminder_time: calculateAbsoluteReminderTime(opts.eventLocalStart, preset),
+          notification_type: r.notificationType,
+        }
+      }
+      const minutes = allDayPresetToMinutesBefore(opts.eventLocalStart, preset)
+      return { minutes_before: minutes, notification_type: r.notificationType }
     }
     const minutes =
       r.mode === "custom" && typeof r.customMinutes === "number"
@@ -362,7 +427,6 @@ export function EditEventDialog({
         await api.delete(`/reminders/bulk`, { data: { reminder_ids: deleteIds } })
       }
       if (creates.length > 0) {
-        // backend expects event_id for each
         const event_id = Number(eventId)
         const body = { reminders: creates.map((c) => ({ event_id, ...c })) }
         await api.post(`/reminders/bulk`, body)
@@ -430,7 +494,6 @@ export function EditEventDialog({
         toast.success("Event updated")
       }
 
-      // notify sidebar reminders to refresh on any update
       try {
         window.dispatchEvent(new CustomEvent("reminders:refresh"))
       } catch {}

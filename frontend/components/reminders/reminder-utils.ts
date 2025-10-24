@@ -113,6 +113,71 @@ export function calculateAbsoluteReminderTime(
   return localDateToUtcIso(localDate)
 }
 
+/**
+ * Calculate minutes_before for an all-day preset relative to the event's local start (midnight).
+ * Returns >= 0. Note: "same_day_9am" will produce 0 (since it's after start); callers should
+ * decide to NOT use minutes for same-day and use absolute instead.
+ */
+export function allDayPresetToMinutesBefore(
+  eventLocalStart: Date,
+  preset: AllDayPreset,
+  defaultHour = DEFAULT_ALL_DAY_HOUR
+): number {
+  const target = allDayPresetToLocalDate(eventLocalStart, preset, defaultHour)
+  const diffMs = eventLocalStart.getTime() - target.getTime()
+  const minutes = Math.floor(diffMs / 60000)
+  return Math.max(0, minutes)
+}
+
+/**
+ * Detect if an absolute reminder matches one of our supported all-day presets
+ * relative to the event's local start date.
+ */
+export function detectAllDayPresetFromAbsolute(
+  reminderLocal: Date,
+  eventLocalStart: Date,
+  defaultHour = DEFAULT_ALL_DAY_HOUR
+): AllDayPreset | undefined {
+  const atDefaultHour =
+    reminderLocal.getHours() === defaultHour &&
+    reminderLocal.getMinutes() === 0 &&
+    reminderLocal.getSeconds() === 0 &&
+    reminderLocal.getMilliseconds() === 0
+
+  if (!atDefaultHour) return undefined
+
+  const base = startOfDay(eventLocalStart)
+  const rDay = startOfDay(reminderLocal)
+  const diff = differenceInDays(base, rDay) // how many days before event start
+
+  if (diff === 0) return "same_day_9am"
+  if (diff === 1) return "day_1_before_9am"
+  if (diff === 2) return "day_2_before_9am"
+  if (diff === 7) return "week_1_before_9am"
+  return undefined
+}
+
+/**
+ * Detect if a minutes_before value matches one of our all-day presets
+ * (assuming default 9:00 AM for reminder).
+ * 1 day before @9 → 1440 - 540 = 900
+ * 2 days before @9 → 2880 - 540 = 2340
+ * 1 week before @9 → 10080 - 540 = 9540
+ */
+export function detectAllDayPresetFromMinutesBefore(
+  minutes: number,
+  defaultHour = DEFAULT_ALL_DAY_HOUR
+): AllDayPreset | undefined {
+  const day = 24 * 60
+  const nine = defaultHour * 60
+  const map = new Map<number, AllDayPreset>([
+    [day - nine, "day_1_before_9am"],         // 900
+    [2 * day - nine, "day_2_before_9am"],     // 2340
+    [7 * day - nine, "week_1_before_9am"],    // 9540
+  ])
+  return map.get(minutes)
+}
+
 export function buildReminderPayloadFromForm(
   reminders: ReminderFormValue[],
   options: {
@@ -125,18 +190,41 @@ export function buildReminderPayloadFromForm(
   return reminders
     .map((r) => {
       if (isAllDay) {
+        // Custom absolute: prefer relative minutes if it's before event start; else absolute
         if (r.mode === "custom" && r.customDateTime) {
+          const custom = new Date(r.customDateTime)
+          if (custom.getTime() < eventLocalStart.getTime()) {
+            const diffMin = Math.max(
+              0,
+              Math.floor((eventLocalStart.getTime() - custom.getTime()) / 60000)
+            )
+            return {
+              minutes_before: diffMin,
+              notification_type: r.notificationType,
+            } as ReminderCreatePayload
+          }
           return {
-            reminder_time: localDateToUtcIso(r.customDateTime),
+            reminder_time: localDateToUtcIso(custom),
             notification_type: r.notificationType,
           } as ReminderCreatePayload
         }
-        const preset = ((r.preset as AllDayPreset | undefined) ?? "day_1_before_9am")
+
+        // Presets: send minutes_before for presets that are before event start.
+        const preset = (r.preset as AllDayPreset | undefined) ?? "day_1_before_9am"
+        if (preset === "same_day_9am") {
+          // same-day 9am is after midnight (event start) => must be absolute
+          return {
+            reminder_time: calculateAbsoluteReminderTime(eventLocalStart, preset),
+            notification_type: r.notificationType,
+          } as ReminderCreatePayload
+        }
+        const minutes = allDayPresetToMinutesBefore(eventLocalStart, preset)
         return {
-          reminder_time: calculateAbsoluteReminderTime(eventLocalStart, preset),
+          minutes_before: minutes,
           notification_type: r.notificationType,
         } as ReminderCreatePayload
       } else {
+        // Timed events: always relative minutes
         if (r.mode === "custom" && typeof r.customMinutes === "number") {
           return {
             minutes_before: Math.max(0, Math.floor(r.customMinutes)),

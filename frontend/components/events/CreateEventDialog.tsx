@@ -42,7 +42,9 @@ import {
   isDuplicateReminder,
   getReminderComparisonKey,
   validateRelativeReminder,
-  buildReminderPayloadFromForm,
+  DEFAULT_ALL_DAY_HOUR,
+  AllDayPreset,
+  TimedPreset,
 } from "@/components/reminders"
 
 export function CreateEventDialog({
@@ -146,10 +148,10 @@ export function CreateEventDialog({
         list.map((r) =>
           isAllDay
             ? {
-                // Timed -> All-day: default to same_day_9am
+                // Timed -> All-day: default to 1 day before at 9 AM (stays before start, safe for backend)
                 notificationType: r.notificationType,
                 mode: "preset",
-                preset: "same_day_9am",
+                preset: "day_1_before_9am",
               }
             : {
                 // All-day -> Timed: default to at_start
@@ -217,7 +219,7 @@ export function CreateEventDialog({
         if (r.mode === "custom" && typeof r.customMinutes === "number") {
           minutes = Math.max(0, Math.floor(r.customMinutes))
         } else if (r.mode === "preset") {
-          // rely on server-safe conversion during payload build; still noop here
+          // For timed presets, they map to fixed minutes; handled server-side anyway
         }
         if (typeof minutes === "number") {
           if (!validateRelativeReminder(minutes, eventLocalStart)) {
@@ -229,6 +231,94 @@ export function CreateEventDialog({
     }
 
     return true
+  }
+
+  // Helpers for building all-day relative minutes for presets
+  function allDayPresetTargetLocalDate(eventStartLocalMidnight: Date, preset: AllDayPreset): Date {
+    const base = new Date(eventStartLocalMidnight)
+    const target = new Date(base)
+    switch (preset) {
+      case "same_day_9am": {
+        target.setHours(DEFAULT_ALL_DAY_HOUR, 0, 0, 0)
+        return target
+      }
+      case "day_1_before_9am": {
+        target.setDate(target.getDate() - 1)
+        target.setHours(DEFAULT_ALL_DAY_HOUR, 0, 0, 0)
+        return target
+      }
+      case "day_2_before_9am": {
+        target.setDate(target.getDate() - 2)
+        target.setHours(DEFAULT_ALL_DAY_HOUR, 0, 0, 0)
+        return target
+      }
+      case "week_1_before_9am": {
+        target.setDate(target.getDate() - 7)
+        target.setHours(DEFAULT_ALL_DAY_HOUR, 0, 0, 0)
+        return target
+      }
+      default: {
+        target.setHours(DEFAULT_ALL_DAY_HOUR, 0, 0, 0)
+        return target
+      }
+    }
+  }
+
+  function allDayPresetToMinutesBefore(eventStartLocalMidnight: Date, preset: AllDayPreset): number {
+    const target = allDayPresetTargetLocalDate(eventStartLocalMidnight, preset)
+    const diffMin = Math.floor((eventStartLocalMidnight.getTime() - target.getTime()) / 60000)
+    return Math.max(0, diffMin)
+  }
+
+  // Build reminders payload locally to ensure all-day presets use minutes_before (so they follow date changes)
+  function buildRemindersPayload(
+    list: ReminderFormValue[],
+    opts: { isAllDay: boolean; eventLocalStart: Date }
+  ): Array<{ minutes_before?: number; reminder_time?: string; notification_type: string }> {
+    const { isAllDay, eventLocalStart } = opts
+    return list.map((r) => {
+      if (!isAllDay) {
+        // Timed events: always relative
+        let minutes: number
+        if (r.mode === "custom" && typeof r.customMinutes === "number") {
+          minutes = Math.max(0, Math.floor(r.customMinutes))
+        } else {
+          const preset = (r.preset as TimedPreset) || "at_start"
+          const map: Record<TimedPreset, number> = {
+            at_start: 0,
+            min_5: 5,
+            min_10: 10,
+            min_15: 15,
+            min_30: 30,
+            hr_1: 60,
+          }
+          minutes = map[preset] ?? 0
+        }
+        return { minutes_before: minutes, notification_type: r.notificationType }
+      }
+
+      // All-day events:
+      if (r.mode === "custom" && r.customDateTime) {
+        const dt = new Date(r.customDateTime)
+        if (dt.getTime() < eventLocalStart.getTime()) {
+          const minutes = Math.max(
+            0,
+            Math.floor((eventLocalStart.getTime() - dt.getTime()) / 60000)
+          )
+          return { minutes_before: minutes, notification_type: r.notificationType }
+        }
+        return { reminder_time: localDateToUtcIso(dt), notification_type: r.notificationType }
+      }
+
+      const preset = (r.preset as AllDayPreset) || "day_1_before_9am"
+      if (preset === "same_day_9am") {
+        // This preset is after midnight; keep absolute to avoid backend "after start" validation
+        const abs = allDayPresetTargetLocalDate(eventLocalStart, preset)
+        return { reminder_time: localDateToUtcIso(abs), notification_type: r.notificationType }
+      }
+      const minutes = allDayPresetToMinutesBefore(eventLocalStart, preset)
+      return { minutes_before: minutes, notification_type: r.notificationType }
+    })
   }
 
   const onSubmit = async (values: EventFormValues) => {
@@ -268,7 +358,7 @@ export function CreateEventDialog({
       }
 
       if (reminders.length > 0) {
-        payload.reminders = buildReminderPayloadFromForm(reminders, {
+        payload.reminders = buildRemindersPayload(reminders, {
           isAllDay,
           eventLocalStart,
         })
@@ -572,7 +662,7 @@ export function CreateEventDialog({
                   eventLocalStart={eventLocalStart}
                   onChangeAction={(v) => updateReminderAt(idx, v)}
                   onDeleteAction={() => deleteReminderAt(idx)}
-                  expandWhenOnDesktop // NEW: let "When" fill remaining space (md+)
+                  expandWhenOnDesktop
                 />
               ))}
             </div>
