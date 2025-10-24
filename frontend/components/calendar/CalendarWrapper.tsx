@@ -15,7 +15,6 @@ import { addDays, addHours, startOfDay, isSameDay } from "date-fns"
 import { categoryStore } from "@/store/category"
 import { useDebounce } from "@/hooks/useDebounce"
 import { ViewEventDialog, CreateEventDialog, EditEventDialog } from "@/components/events"
-import { utcIsoToLocalDate } from "@/lib/time"
 
 function extractMessage(err: unknown, fallback: string) {
   return (
@@ -369,16 +368,16 @@ export function Calendar() {
 
       <ViewEventDialog
         open={viewOpen}
-        onOpenChange={setViewOpen}
+        onOpenChangeAction={setViewOpen}
         event={selectedEvent}
-        onEditClick={handleEditClick}
-        onDeleted={handleEventDeleted}
+        onEditClickAction={handleEditClick}
+        onDeletedAction={handleEventDeleted}
       />
 
       <CreateEventDialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={handleEventCreated}
+        onOpenChangeAction={setCreateOpen}
+        onCreatedAction={handleEventCreated}
         initialDate={createInitialDate}
         initialStart={createInitialStart}
         initialEnd={createInitialEnd}
@@ -387,9 +386,9 @@ export function Calendar() {
 
       <EditEventDialog
         open={editOpen}
-        onOpenChange={setEditOpen}
+        onOpenChangeAction={setEditOpen}
         event={selectedEvent}
-        onUpdated={handleEventUpdated}
+        onUpdatedAction={handleEventUpdated}
       />
     </>
   )
