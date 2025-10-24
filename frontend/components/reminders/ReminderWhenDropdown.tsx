@@ -103,8 +103,15 @@ export function ReminderWhenDropdown({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="justify-between w-full md:w-auto" disabled={disabled} aria-label="Select reminder time">
-          <CalendarClock className="size-4" />
+        <Button
+          variant="outline"
+          size="sm"
+          // Fixed width from md+; full-width on mobile. Truncate long labels.
+          className="justify-between w-full md:w-[220px] md:shrink-0"
+          disabled={disabled}
+          aria-label="Select reminder time"
+        >
+          <CalendarClock className="size-4 align-center" />
           <span className="truncate">{currentLabel(value, isAllDay)}</span>
           <ChevronDown className="size-4 opacity-70" />
         </Button>

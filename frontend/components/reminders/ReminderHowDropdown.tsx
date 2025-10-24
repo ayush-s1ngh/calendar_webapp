@@ -34,17 +34,18 @@ export function ReminderHowDropdown({
           <Button
             variant="outline"
             size="sm"
-            className="w-auto px-2 gap-2"
+            // Fixed width from md+; full-width on mobile. Truncate label and keep trigger width stable.
+            className="relative justify-center w-full md:w-[90px] md:shrink-0 px-2 gap-2"
             disabled={disabled}
             aria-label={`Notification type: ${formatNotificationTypeLabel(value)}`}
             title={formatNotificationTypeLabel(value)}
           >
             <TypeIcon type={value} />
-            <span className="whitespace-nowrap">{formatNotificationTypeLabel(value)}</span>
-            <ChevronDown className="size-4 opacity-70" />
+            {/*<span className="truncate">{formatNotificationTypeLabel(value)}</span>*/}
+            <ChevronDown className="size-4 opacity-70 absolute right-2 top-1/2 -translate-y-1/2" />
           </Button>
         </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56">
+      <DropdownMenuContent className="w-24">
         <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onChange("email") }}>
           <Mail className="size-4" />
           Email
@@ -55,7 +56,7 @@ export function ReminderHowDropdown({
         </DropdownMenuItem>
         <DropdownMenuItem disabled className="opacity-60">
           <MessageCircle className="size-4" />
-          SMS (Coming soon)
+          SMS
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

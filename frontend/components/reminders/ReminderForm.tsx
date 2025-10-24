@@ -56,15 +56,17 @@ export function ReminderFormRow({
   return (
     <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 rounded-md border bg-card/60 px-3 py-2">
       <div className="flex-1 flex flex-col sm:flex-row gap-2">
+        {/* When (fixed width from md+) */}
         <ReminderWhenDropdown
           isAllDay={isAllDay}
-          eventLocalStart={eventLocalStart}
+          // eventLocalStart={eventLocalStart}
           value={value}
           onChange={(v) => onChange(v)}
           onOpenCustomTimed={() => setOpenCustomTimed(true)}
           onOpenCustomAllDay={() => setOpenCustomAllDay(true)}
           disabled={disabled}
         />
+        {/* How (fixed width from md+) */}
         <ReminderHowDropdown
           value={value.notificationType}
           onChange={(t) => onChange({ ...value, notificationType: t })}
