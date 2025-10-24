@@ -1,0 +1,25 @@
+# IDE / Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Data files
+*.csv
+*.tsv
+*.dat
+*.log
+
+# Database files
+*.sql
+*.sqlite
+*.db
+
+.docs/
