@@ -1,9 +1,18 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from .. import scheduler, db, create_app
 from ..models import Reminder, Event, User
 from ..utils.email_service import email_service
 from .logger import logger
 import os
+
+
+def _to_aware_utc(dt: datetime) -> datetime | None:
+    """Normalize a datetime to timezone-aware UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def check_reminders():
@@ -20,28 +29,37 @@ def check_reminders():
 
         # Create and activate an application context
         with app.app_context():
-            # Get current time
-            current_time = datetime.utcnow()
+            # Use timezone-aware UTC for "now"
+            current_time_utc = datetime.now(timezone.utc)
+            one_minute_later = current_time_utc + timedelta(minutes=1)
 
             # Find reminders that are due within the next minute and not yet sent
             upcoming_reminders = Reminder.query.filter(
-                Reminder.reminder_time <= current_time + timedelta(minutes=1),
+                Reminder.reminder_time <= one_minute_later,
                 Reminder.notification_sent == False
             ).all()
 
             # Process each reminder
             for reminder in upcoming_reminders:
                 try:
+                    # Normalize reminder time to aware UTC before Python-side comparisons
+                    reminder_time_utc = _to_aware_utc(reminder.reminder_time)
+                    if not reminder_time_utc:
+                        logger.warning(f"Reminder {reminder.id} has no reminder_time; skipping")
+                        continue
+
+                    # Only send if the reminder time is due (<= now)
+                    if reminder_time_utc > current_time_utc:
+                        continue  # not due yet; will be picked up in a subsequent run
+
                     # Get associated event
                     event = Event.query.get(reminder.event_id)
-
                     if not event:
                         logger.warning(f"Reminder {reminder.id} references non-existent event {reminder.event_id}")
                         continue
 
                     # Get user
                     user = User.query.get(event.user_id)
-
                     if not user:
                         logger.warning(f"Event {event.id} references non-existent user {event.user_id}")
                         continue
@@ -50,13 +68,14 @@ def check_reminders():
                     notification_sent = False
 
                     if reminder.notification_type == 'email':
-                        # Send email notification
-                        event_time = event.start_datetime.strftime('%Y-%m-%d %H:%M UTC')
+                        # Send email notification with UTC ISO timestamp
+                        event_time_utc = _to_aware_utc(event.start_datetime)
+                        event_time_str = event_time_utc.isoformat().replace('+00:00', 'Z') if event_time_utc else ''
                         notification_sent = email_service.send_reminder_notification(
                             user.email,
                             user.username,
                             event.title,
-                            event_time
+                            event_time_str
                         )
                     elif reminder.notification_type == 'push':
                         # TODO: Implement push notification
@@ -66,6 +85,9 @@ def check_reminders():
                         # TODO: Implement SMS notification
                         logger.info(f"SMS notification not implemented yet for reminder {reminder.id}")
                         notification_sent = True  # Mark as sent for now
+                    else:
+                        logger.warning(f"Unknown notification type '{reminder.notification_type}' for reminder {reminder.id}")
+                        notification_sent = True  # Avoid retry loop for unknown types
 
                     if notification_sent:
                         # Mark reminder as sent
@@ -98,9 +120,11 @@ def cleanup_old_tokens():
         with app.app_context():
             from ..models import EmailVerificationToken, PasswordResetToken
 
+            current_time_utc = datetime.now(timezone.utc)
+
             # Clean up expired email verification tokens
             expired_email_tokens = EmailVerificationToken.query.filter(
-                EmailVerificationToken.expires_at < datetime.utcnow()
+                EmailVerificationToken.expires_at < current_time_utc
             ).all()
 
             for token in expired_email_tokens:
@@ -108,7 +132,7 @@ def cleanup_old_tokens():
 
             # Clean up expired password reset tokens
             expired_reset_tokens = PasswordResetToken.query.filter(
-                PasswordResetToken.expires_at < datetime.utcnow()
+                PasswordResetToken.expires_at < current_time_utc
             ).all()
 
             for token in expired_reset_tokens:

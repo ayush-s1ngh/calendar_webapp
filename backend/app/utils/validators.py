@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from email_validator import validate_email, EmailNotValidError
 
 
@@ -68,7 +68,7 @@ def validate_email_address(email):
 
     try:
         # Validate and normalize the email
-        valid = validate_email(email)
+        validate_email(email)
         return True, None
     except EmailNotValidError as e:
         return False, str(e)
@@ -76,20 +76,26 @@ def validate_email_address(email):
 
 def validate_datetime_string(date_str):
     """
-    Validate datetime string format (ISO format: YYYY-MM-DD HH:MM:SS)
+    Validate datetime string format (ISO format). Always return a timezone-aware UTC datetime.
 
     Parameters:
     - date_str: String to validate
 
     Returns:
-    - (True, datetime_obj) if valid, (False, error_message) if invalid
+    - (True, datetime_obj_utc) if valid, (False, error_message) if invalid
     """
     if not date_str or not isinstance(date_str, str):
         return False, "Datetime is required"
 
     try:
-        # Attempt to parse the datetime string
+        # Support 'Z' suffix and offsets; normalize to UTC tz-aware
         dt_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        if dt_obj.tzinfo is None:
+            # Assume UTC when no tz provided
+            dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+        else:
+            # Convert any offset-aware datetime to UTC
+            dt_obj = dt_obj.astimezone(timezone.utc)
         return True, dt_obj
     except ValueError:
         return False, "Invalid datetime format. Use ISO format (YYYY-MM-DD HH:MM:SS)"

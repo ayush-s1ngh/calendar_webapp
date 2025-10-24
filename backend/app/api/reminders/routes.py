@@ -12,6 +12,15 @@ from ...utils.error_handler import handle_validation_errors, handle_database_err
 from ...utils.logger import logger
 
 
+def _to_aware_utc(dt: datetime) -> datetime:
+    """Normalize a datetime to timezone-aware UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 @reminders_bp.route('/event/<int:event_id>/reminders', methods=['GET'])
 @jwt_required()
 @log_request_info
@@ -40,13 +49,13 @@ def get_event_reminders(event_id):
             reminders_data.append({
                 "id": reminder.id,
                 "event_id": reminder.event_id,
-                "reminder_time": reminder.reminder_time.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z'),
+                "reminder_time": _to_aware_utc(reminder.reminder_time).isoformat().replace('+00:00', 'Z'),
                 "notification_sent": reminder.notification_sent,
                 "notification_type": reminder.notification_type,
                 "minutes_before": reminder.minutes_before,
                 "is_relative": reminder.is_relative,
-                "created_at": reminder.created_at.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z'),
-                "updated_at": reminder.updated_at.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z')
+                "created_at": _to_aware_utc(reminder.created_at).isoformat().replace('+00:00', 'Z'),
+                "updated_at": _to_aware_utc(reminder.updated_at).isoformat().replace('+00:00', 'Z')
             })
 
         return success_response(data={"reminders": reminders_data})
@@ -106,15 +115,17 @@ def create_reminder(event_id):
         if notification_type not in valid_types:
             return error_response(f"Invalid notification type. Must be one of: {', '.join(valid_types)}", 400)
 
+        current_time_utc = datetime.now(timezone.utc)
+        event_start_utc = _to_aware_utc(event.start_datetime)
+
         # Calculate reminder time and determine if it's relative
         if minutes_before is not None:
             # Relative reminder
             if not isinstance(minutes_before, int) or minutes_before < 0:
                 return error_response("minutes_before must be a non-negative integer", 400)
 
-            # Prevent past reminders
-            reminder_time_obj = event.start_datetime - timedelta(minutes=minutes_before)
-            if reminder_time_obj <= datetime.utcnow():
+            reminder_time_obj = event_start_utc - timedelta(minutes=minutes_before)
+            if reminder_time_obj <= current_time_utc:
                 return error_response("Calculated reminder time cannot be in the past", 400)
 
             is_relative = True
@@ -124,16 +135,15 @@ def create_reminder(event_id):
             if not is_valid:
                 return error_response(reminder_time_obj, 400)
 
+            # normalize to tz-aware UTC (validator already does)
+            reminder_time_obj = _to_aware_utc(reminder_time_obj)
+
             # Prevent past reminders
-            if reminder_time_obj <= datetime.utcnow():
+            if reminder_time_obj <= current_time_utc:
                 return error_response("Reminder time cannot be in the past", 400)
 
             # Ensure reminder is before event start time
-            event_start = event.start_datetime
-            if event_start.tzinfo is None:
-                event_start = event_start.replace(tzinfo=timezone.utc)
-
-            if reminder_time_obj >= event_start:
+            if reminder_time_obj >= event_start_utc:
                 return error_response("Reminder time must be before event start time", 400)
 
             is_relative = False
@@ -166,13 +176,13 @@ def create_reminder(event_id):
         reminder_data = {
             "id": new_reminder.id,
             "event_id": new_reminder.event_id,
-            "reminder_time": new_reminder.reminder_time.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z'),
+            "reminder_time": _to_aware_utc(new_reminder.reminder_time).isoformat().replace('+00:00', 'Z'),
             "notification_sent": new_reminder.notification_sent,
             "notification_type": new_reminder.notification_type,
             "minutes_before": new_reminder.minutes_before,
             "is_relative": new_reminder.is_relative,
-            "created_at": new_reminder.created_at.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z'),
-            "updated_at": new_reminder.updated_at.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z')
+            "created_at": _to_aware_utc(new_reminder.created_at).isoformat().replace('+00:00', 'Z'),
+            "updated_at": _to_aware_utc(new_reminder.updated_at).isoformat().replace('+00:00', 'Z')
         }
 
         logger.info(f"Reminder created for event {event_id} by user {current_user.username}")
@@ -233,6 +243,9 @@ def update_reminder(reminder_id):
                 return error_response(f"Invalid notification type. Must be one of: {', '.join(valid_types)}", 400)
             updates['notification_type'] = notification_type
 
+        current_time_utc = datetime.now(timezone.utc)
+        event_start_utc = _to_aware_utc(event.start_datetime)
+
         # Update reminder time/minutes_before if provided
         if 'reminder_time' in data or 'minutes_before' in data:
             reminder_time_str = data.get('reminder_time')
@@ -246,8 +259,8 @@ def update_reminder(reminder_id):
                 if not isinstance(minutes_before, int) or minutes_before < 0:
                     return error_response("minutes_before must be a non-negative integer", 400)
 
-                reminder_time_obj = event.start_datetime - timedelta(minutes=minutes_before)
-                if reminder_time_obj <= datetime.utcnow():
+                reminder_time_obj = event_start_utc - timedelta(minutes=minutes_before)
+                if reminder_time_obj <= current_time_utc:
                     return error_response("Calculated reminder time cannot be in the past", 400)
 
                 updates['reminder_time'] = reminder_time_obj
@@ -260,14 +273,12 @@ def update_reminder(reminder_id):
                 if not is_valid:
                     return error_response(reminder_time_obj, 400)
 
-                if reminder_time_obj <= datetime.utcnow():
+                reminder_time_obj = _to_aware_utc(reminder_time_obj)
+
+                if reminder_time_obj <= current_time_utc:
                     return error_response("Reminder time cannot be in the past", 400)
 
-                event_start = event.start_datetime
-                if event_start.tzinfo is None:
-                    event_start = event_start.replace(tzinfo=timezone.utc)
-
-                if reminder_time_obj >= event_start:
+                if reminder_time_obj >= event_start_utc:
                     return error_response("Reminder time must be before event start time", 400)
 
                 updates['reminder_time'] = reminder_time_obj
@@ -285,13 +296,13 @@ def update_reminder(reminder_id):
         reminder_data = {
             "id": reminder.id,
             "event_id": reminder.event_id,
-            "reminder_time": reminder.reminder_time.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z'),
+            "reminder_time": _to_aware_utc(reminder.reminder_time).isoformat().replace('+00:00', 'Z'),
             "notification_sent": reminder.notification_sent,
             "notification_type": reminder.notification_type,
             "minutes_before": reminder.minutes_before,
             "is_relative": reminder.is_relative,
-            "created_at": reminder.created_at.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z'),
-            "updated_at": reminder.updated_at.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z')
+            "created_at": _to_aware_utc(reminder.created_at).isoformat().replace('+00:00', 'Z'),
+            "updated_at": _to_aware_utc(reminder.updated_at).isoformat().replace('+00:00', 'Z')
         }
 
         logger.info(f"Reminder {reminder_id} updated by user {current_user.username}")
@@ -384,6 +395,7 @@ def create_bulk_reminders():
         ).all()
 
         valid_event_ids = {event.id: event for event in events}
+        current_time_utc = datetime.now(timezone.utc)
 
         for idx, reminder_data in enumerate(reminders_data):
             try:
@@ -393,6 +405,7 @@ def create_bulk_reminders():
                     continue
 
                 event = valid_event_ids[event_id]
+                event_start_utc = _to_aware_utc(event.start_datetime)
 
                 # Validate reminder data (similar to single create)
                 reminder_time_str = reminder_data.get('reminder_time')
@@ -413,8 +426,8 @@ def create_bulk_reminders():
                         errors.append(f"Reminder {idx + 1}: minutes_before must be a non-negative integer")
                         continue
 
-                    reminder_time_obj = event.start_datetime - timedelta(minutes=minutes_before)
-                    if reminder_time_obj <= datetime.utcnow():
+                    reminder_time_obj = event_start_utc - timedelta(minutes=minutes_before)
+                    if reminder_time_obj <= current_time_utc:
                         errors.append(f"Reminder {idx + 1}: Calculated reminder time cannot be in the past")
                         continue
 
@@ -425,15 +438,13 @@ def create_bulk_reminders():
                         errors.append(f"Reminder {idx + 1}: {reminder_time_obj}")
                         continue
 
-                    if reminder_time_obj <= datetime.utcnow():
+                    reminder_time_obj = _to_aware_utc(reminder_time_obj)
+
+                    if reminder_time_obj <= current_time_utc:
                         errors.append(f"Reminder {idx + 1}: Reminder time cannot be in the past")
                         continue
 
-                    event_start = event.start_datetime
-                    if event_start.tzinfo is None:
-                        event_start = event_start.replace(tzinfo=timezone.utc)
-
-                    if reminder_time_obj >= event_start:
+                    if reminder_time_obj >= event_start_utc:
                         errors.append(f"Reminder {idx + 1}: Reminder time must be before event start time")
                         continue
 
@@ -466,7 +477,7 @@ def create_bulk_reminders():
             created_data.append({
                 "id": reminder.id,
                 "event_id": reminder.event_id,
-                "reminder_time": reminder.reminder_time.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z'),
+                "reminder_time": _to_aware_utc(reminder.reminder_time).isoformat().replace('+00:00', 'Z'),
                 "notification_type": reminder.notification_type,
                 "minutes_before": reminder.minutes_before,
                 "is_relative": reminder.is_relative
