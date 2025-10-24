@@ -1,0 +1,19 @@
+# Enhancements
+- separate api for recurrence events
+- recurrence events deletion (3 delete options : this event only, this and future events, all events)
+- recurrence events end options : end on date, end on count, end on never
+- backend does not allows reminders after event start, but this causes issues in all day events, so it should be fixed
+
+
+
+
+# Additions
+- migrate from Flask to FastAPI
+- get users phone number while registering and verify it by otp on whatsapp
+- getting reminders on whatsapp
+- more personalised settings
+
+
+
+# Some frontend ideas
+- calendar view scrollable from one month to another
