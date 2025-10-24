@@ -18,6 +18,7 @@ import {
   AllDayPreset,
   DEFAULT_ALL_DAY_HOUR,
 } from "@/components/reminders"
+import { cn } from "@/lib/utils"
 
 function labelForTimedPreset(p: TimedPreset) {
   switch (p) {
@@ -49,10 +50,7 @@ function labelForAllDayPreset(p: AllDayPreset) {
   }
 }
 
-function currentLabel(
-  v: ReminderFormValue,
-  isAllDay: boolean
-) {
+function currentLabel(v: ReminderFormValue, isAllDay: boolean) {
   if (!isAllDay) {
     if (v.mode === "preset" && v.preset) return labelForTimedPreset(v.preset as TimedPreset)
     if (v.mode === "custom" && typeof v.customMinutes === "number") {
@@ -79,6 +77,7 @@ export function ReminderWhenDropdown({
   onOpenCustomTimed,
   onOpenCustomAllDay,
   disabled,
+  grow = false, // NEW: allow trigger to expand on desktop
 }: {
   isAllDay: boolean
   value: ReminderFormValue
@@ -86,6 +85,7 @@ export function ReminderWhenDropdown({
   onOpenCustomTimed?: () => void
   onOpenCustomAllDay?: () => void
   disabled?: boolean
+  grow?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
 
@@ -100,18 +100,23 @@ export function ReminderWhenDropdown({
     onChange(next)
   }
 
+  const triggerClasses = cn(
+    "justify-between w-full",
+    // On desktop, either fixed width or grow to fill free space with a reasonable min width
+    grow ? "md:min-w-[220px] md:flex-1" : "md:w-[220px] md:shrink-0"
+  )
+
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
           size="sm"
-          // Fixed width from md+; full-width on mobile. Truncate long labels.
-          className="justify-between w-full md:w-[220px] md:shrink-0"
+          className={triggerClasses}
           disabled={disabled}
           aria-label="Select reminder time"
         >
-          <CalendarClock className="size-4 align-center" />
+          <CalendarClock className="size-4" />
           <span className="truncate">{currentLabel(value, isAllDay)}</span>
           <ChevronDown className="size-4 opacity-70" />
         </Button>
@@ -149,7 +154,6 @@ export function ReminderWhenDropdown({
           </>
         ) : (
           <>
-            {/* Removed "On event day at 9:00 AM" option */}
             <DropdownMenuItem onSelect={(e) => { e.preventDefault(); selectPreset("day_1_before_9am") }}>
               1 day before at {DEFAULT_ALL_DAY_HOUR}:00
             </DropdownMenuItem>

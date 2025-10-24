@@ -6,8 +6,6 @@ import { Trash2, Pencil } from "lucide-react"
 import {
   ReminderFormValue,
   ReminderFormMode,
-  TimedPreset,
-  AllDayPreset,
 } from "@/components/reminders"
 import { ReminderWhenDropdown } from "./ReminderWhenDropdown"
 import { ReminderHowDropdown } from "./ReminderHowDropdown"
@@ -22,6 +20,7 @@ export function ReminderFormRow({
   onChange,
   onDelete,
   disabled,
+  expandWhenOnDesktop = false, // NEW: opt-in expansion for "When" trigger
 }: {
   value: ReminderFormValue
   isAllDay: boolean
@@ -29,6 +28,7 @@ export function ReminderFormRow({
   onChange: (v: ReminderFormValue) => void
   onDelete: () => void
   disabled?: boolean
+  expandWhenOnDesktop?: boolean
 }) {
   const [openCustomTimed, setOpenCustomTimed] = React.useState(false)
   const [openCustomAllDay, setOpenCustomAllDay] = React.useState(false)
@@ -56,15 +56,15 @@ export function ReminderFormRow({
   return (
     <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 rounded-md border bg-card/60 px-3 py-2">
       <div className="flex-1 flex flex-col sm:flex-row gap-2">
-        {/* When (fixed width from md+) */}
+        {/* When (can expand on desktop if requested by parent) */}
         <ReminderWhenDropdown
           isAllDay={isAllDay}
-          // eventLocalStart={eventLocalStart}
           value={value}
           onChange={(v) => onChange(v)}
           onOpenCustomTimed={() => setOpenCustomTimed(true)}
           onOpenCustomAllDay={() => setOpenCustomAllDay(true)}
           disabled={disabled}
+          grow={expandWhenOnDesktop}
         />
         {/* How (fixed width from md+) */}
         <ReminderHowDropdown

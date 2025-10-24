@@ -34,14 +34,12 @@ export function ReminderHowDropdown({
           <Button
             variant="outline"
             size="sm"
-            // Fixed width from md+; full-width on mobile. Truncate label and keep trigger width stable.
             className="relative justify-center w-full md:w-[90px] md:shrink-0 px-2 gap-2"
             disabled={disabled}
             aria-label={`Notification type: ${formatNotificationTypeLabel(value)}`}
             title={formatNotificationTypeLabel(value)}
           >
             <TypeIcon type={value} />
-            {/*<span className="truncate">{formatNotificationTypeLabel(value)}</span>*/}
             <ChevronDown className="size-4 opacity-70 absolute right-2 top-1/2 -translate-y-1/2" />
           </Button>
         </DropdownMenuTrigger>

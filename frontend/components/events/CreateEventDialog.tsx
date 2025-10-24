@@ -569,6 +569,7 @@ export function CreateEventDialog({
                   eventLocalStart={eventLocalStart}
                   onChange={(v) => updateReminderAt(idx, v)}
                   onDelete={() => deleteReminderAt(idx)}
+                  expandWhenOnDesktop // NEW: let "When" fill remaining space (md+)
                 />
               ))}
             </div>
