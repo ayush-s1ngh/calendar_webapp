@@ -32,37 +32,31 @@ export type AllDayPreset =
 
 export type ReminderFormMode = "preset" | "custom"
 
-// Local (form) representation of a reminder row.
-// - For timed events, use customMinutes for custom mode.
-// - For all-day events, use customDateTime for custom mode.
 export type ReminderFormValue = {
-  id?: number // Present when editing an existing reminder
+  id?: number
   mode: ReminderFormMode
   preset?: TimedPreset | AllDayPreset
-  customMinutes?: number // for timed custom
-  customDateTime?: Date // for all-day custom
+  customMinutes?: number
+  customDateTime?: Date
   notificationType: NotificationType
 }
 
-// Backend (API) reminder object
 export type ApiReminder = {
   id: number
   event_id: number
-  reminder_time: string | null // ISO 8601 (UTC) for absolute reminder
+  reminder_time: string | null
   notification_sent: boolean
   notification_type: NotificationType
-  minutes_before: number | null // for relative reminder
+  minutes_before: number | null
   is_relative: boolean
 }
 
-// Payload to create/update a reminder via API.
-// Exactly one of minutes_before or reminder_time must be provided.
 export type ReminderCreatePayload =
   | { minutes_before: number; reminder_time?: undefined; notification_type: NotificationType }
   | { reminder_time: string; minutes_before?: undefined; notification_type: NotificationType }
 
 export const MAX_REMINDERS_PER_EVENT = 3
-export const DEFAULT_ALL_DAY_HOUR = 9 // 9:00 AM local
+export const DEFAULT_ALL_DAY_HOUR = 9
 
 const TIMED_PRESET_TO_MINUTES: Record<TimedPreset, number> = {
   at_start: 0,
@@ -83,21 +77,16 @@ export function minutesToTimedPreset(minutes: number): TimedPreset | undefined {
   return match?.[0]
 }
 
-/**
- * Compute local Date for an all-day preset relative to the event's date (start of event local day).
- */
 export function allDayPresetToLocalDate(
   eventLocalDate: Date,
   preset: AllDayPreset,
   defaultHour = DEFAULT_ALL_DAY_HOUR
 ): Date {
-  // Ensure we operate from the start of the event local day
   const baseDay = startOfDay(eventLocalDate)
   const setHour = (d: Date) => {
     const withHour = setHours(d, defaultHour)
     return setSeconds(setMilliseconds(setMinutes(withHour, 0), 0), 0)
   }
-
   switch (preset) {
     case "same_day_9am":
       return setHour(baseDay)
@@ -112,11 +101,6 @@ export function allDayPresetToLocalDate(
   }
 }
 
-/**
- * Compute absolute reminder time (UTC ISO string) for an all-day event.
- * - If customDateTime is provided, use it.
- * - Otherwise compute from preset at defaultHour (local), then convert to UTC ISO.
- */
 export function calculateAbsoluteReminderTime(
   eventLocalDate: Date,
   preset?: AllDayPreset,
@@ -133,7 +117,7 @@ export function buildReminderPayloadFromForm(
   reminders: ReminderFormValue[],
   options: {
     isAllDay: boolean
-    eventLocalStart: Date // local Date of event start
+    eventLocalStart: Date
   }
 ): ReminderCreatePayload[] {
   const { isAllDay, eventLocalStart } = options
@@ -147,14 +131,12 @@ export function buildReminderPayloadFromForm(
             notification_type: r.notificationType,
           } as ReminderCreatePayload
         }
-        // preset for all-day
         const preset = ((r.preset as AllDayPreset | undefined) ?? "day_1_before_9am")
         return {
           reminder_time: calculateAbsoluteReminderTime(eventLocalStart, preset),
           notification_type: r.notificationType,
         } as ReminderCreatePayload
       } else {
-        // timed event (relative)
         if (r.mode === "custom" && typeof r.customMinutes === "number") {
           return {
             minutes_before: Math.max(0, Math.floor(r.customMinutes)),
@@ -171,29 +153,16 @@ export function buildReminderPayloadFromForm(
     .filter(Boolean) as ReminderCreatePayload[]
 }
 
-/**
- * Validate that a relative reminder is not after the event start.
- * - Allows 0 minutes (at start).
- */
 export function validateRelativeReminder(minutesBefore: number, eventLocalStart: Date): boolean {
   if (minutesBefore < 0) return false
   const reminderLocal = addMinutes(eventLocalStart, -minutesBefore)
-  // Allow equality (at start)
   return reminderLocal.getTime() <= eventLocalStart.getTime()
 }
 
-/**
- * Check if an absolute reminder time (local Date) is in the past.
- */
 export function isPastAbsoluteReminder(localDateTime: Date): boolean {
   return localDateTime.getTime() < Date.now()
 }
 
-/**
- * Create a comparable key for duplicate detection.
- * - For timed events: "rel::<minutes>"
- * - For all-day: "abs::<utcIso>"
- */
 export function getReminderComparisonKey(
   r: ReminderFormValue,
   isTimedEvent: boolean,
@@ -206,7 +175,6 @@ export function getReminderComparisonKey(
         : presetToMinutes((r.preset as TimedPreset) || "at_start")
     return `rel::${minutes}`
   }
-  // all-day
   const iso =
     r.mode === "custom" && r.customDateTime
       ? localDateToUtcIso(r.customDateTime)
@@ -214,10 +182,6 @@ export function getReminderComparisonKey(
   return `abs::${iso}`
 }
 
-/**
- * Returns true if adding candidate would duplicate an existing reminder (same time).
- * Notification type is ignored for duplicate checks.
- */
 export function isDuplicateReminder(
   list: ReminderFormValue[],
   candidate: ReminderFormValue,
@@ -228,11 +192,6 @@ export function isDuplicateReminder(
   return list.some((r) => getReminderComparisonKey(r, isTimedEvent, eventLocalStart) === targetKey)
 }
 
-/**
- * Format a reminder timing for display in dialogs/sidebars.
- * - For relative reminders: "At event start", "15 min before", "2 hours before"
- * - For absolute reminders: "On event day at 9:00 AM", "1 day before at 9:00 AM"
- */
 export function formatReminderTimingForDisplay(
   reminder: ApiReminder,
   eventStartUtcIso: string
@@ -244,9 +203,7 @@ export function formatReminderTimingForDisplay(
     const hrs = Math.floor(m / 60)
     return `${hrs} hour${hrs > 1 ? "s" : ""} before`
   }
-
   if (reminder.reminder_time) {
-    // Convert both to local dates for presentation
     const reminderLocal = new Date(reminder.reminder_time)
     const eventLocal = new Date(eventStartUtcIso)
 
@@ -259,17 +216,11 @@ export function formatReminderTimingForDisplay(
     if (daysDiff === 7) return `1 week before at ${format(reminderLocal, "h:mm a")}`
     if (daysDiff > 1) return `${daysDiff} days before at ${format(reminderLocal, "h:mm a")}`
 
-    // Fallback: full date/time if it doesn't match typical presets
     return format(reminderLocal, "EEE, MMM d, h:mm a")
   }
-
-  // Unknown shape fallback
   return "Reminder"
 }
 
-/**
- * Human labels for notification types.
- */
 export function formatNotificationTypeLabel(type: NotificationType): string {
   switch (type) {
     case "email":
@@ -283,9 +234,6 @@ export function formatNotificationTypeLabel(type: NotificationType): string {
   }
 }
 
-/**
- * Round a date to the nearest 5-minute mark (down if >=60).
- */
 export function roundToNearestFiveMinutes(date: Date): Date {
   const d = new Date(date)
   const minutes = d.getMinutes()
@@ -296,8 +244,8 @@ export function roundToNearestFiveMinutes(date: Date): Date {
 
 /**
  * Compute the local trigger Date for a reminder given the event start (UTC ISO).
- * - For relative reminders: eventStart - minutes_before
- * - For absolute reminders: new Date(reminder_time)
+ * - Relative reminders: eventStart - minutes_before
+ * - Absolute reminders: new Date(reminder_time)
  */
 export function getReminderLocalTriggerDate(reminder: ApiReminder, eventStartUtcIso: string): Date {
   if (reminder.is_relative && typeof reminder.minutes_before === "number") {
@@ -307,6 +255,5 @@ export function getReminderLocalTriggerDate(reminder: ApiReminder, eventStartUtc
   if (reminder.reminder_time) {
     return new Date(reminder.reminder_time)
   }
-  // Fallback: just use event start if shape is unexpected
   return new Date(eventStartUtcIso)
 }

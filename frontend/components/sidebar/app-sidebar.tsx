@@ -17,15 +17,15 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { SidebarFilters } from "@/components/sidebar/sidebar-filters"
-import { SidebarReminders } from "@/components/sidebar/sidebar-reminders"
+import { SidebarReminders } from "@/components/sidebar/sidebar-reminders" // NEW
 
 // This is sample data.
 const data = {
   // user data should be fetched from auth store
   user: {
-    name: "Test Name", // this will be user's name from auth store
-    email: "Test Email", // this will be user's email from auth store
-    avatar: "", // keep it empty for now and use fallback, option to add and edit avatar later
+    name: "Test Name",
+    email: "Test Email",
+    avatar: "",
   },
   sidebarMain: [
     {
@@ -53,7 +53,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader />
       <SidebarContent>
         <SidebarFilters />
-        <SidebarReminders />
+        <SidebarReminders /> {/* NEW */}
         <SidebarMain items={data.sidebarMain} />
       </SidebarContent>
       <SidebarFooter>

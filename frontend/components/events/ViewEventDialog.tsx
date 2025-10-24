@@ -48,6 +48,10 @@ export function ViewEventDialog({
     try {
       await api.delete(`/events/${encodeURIComponent(String(event.id))}`)
       toast.success("Event deleted")
+      // Notify sidebar to refresh (reminders removed)
+      try {
+        window.dispatchEvent(new CustomEvent("reminders:refresh"))
+      } catch {}
       onOpenChange(false)
       setDeleteOpen(false)
       onDeleted?.()

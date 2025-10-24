@@ -54,7 +54,7 @@ export function EditEventDialog({
   onOpenChange,
   event,
   onUpdated,
-  openManageInitially = false, // NEW
+  openManageInitially = false,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -79,7 +79,7 @@ export function EditEventDialog({
   const [reminders, setReminders] = React.useState<ReminderFormValue[]>([])
   const [originalApiReminders, setOriginalApiReminders] = React.useState<ApiReminder[]>([])
   const [remindersLoading, setRemindersLoading] = React.useState(false)
-  const [manageOpen, setManageOpen] = React.useState(openManageInitially) // UPDATED
+  const [manageOpen, setManageOpen] = React.useState(false)
 
   // Load event details into form and fetch reminders
   React.useEffect(() => {

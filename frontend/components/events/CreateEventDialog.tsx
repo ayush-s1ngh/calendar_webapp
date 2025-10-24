@@ -275,7 +275,6 @@ export function CreateEventDialog({
       }
 
       await api.post("/events", payload)
-      // NEW: notify sidebar reminders to refresh
       try {
         window.dispatchEvent(new CustomEvent("reminders:refresh"))
       } catch {}

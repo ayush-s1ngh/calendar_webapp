@@ -2,26 +2,24 @@
 
 import * as React from "react"
 import { addDays, format, isSameDay } from "date-fns"
-import { ChevronDown, ChevronUp, Clock, Calendar as CalendarIcon, Pencil } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronDown, ChevronUp, Clock, Mail, Pencil, Smartphone, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarGroupContent,
+  SidebarGroupLabel,
 } from "@/components/ui/sidebar"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import api from "@/lib/api"
-
-import { ViewEventDialog } from "@/components/events/ViewEventDialog"
-import { EditEventDialog } from "@/components/events/EditEventDialog"
-import { EventData } from "@/components/events/event-utils"
+import type { EventData } from "@/components/events"
 import {
   ApiReminder,
-  formatReminderTimingForDisplay,
-  formatNotificationTypeLabel,
   getReminderLocalTriggerDate,
+  NotificationType,
 } from "@/components/reminders"
+import { ViewEventDialog } from "@/components/events/ViewEventDialog"
+import { EditEventDialog } from "@/components/events/EditEventDialog"
 
 type EventWithReminders = {
   event: EventData
@@ -30,7 +28,6 @@ type EventWithReminders = {
 }
 
 function extractEventsUnknown(root: any): EventData[] {
-  // Try to be resilient to multiple shapes
   if (Array.isArray(root)) return root as EventData[]
   if (Array.isArray(root?.events)) return root.events as EventData[]
   if (Array.isArray(root?.data)) return root.data as EventData[]
@@ -52,6 +49,12 @@ async function fetchEventReminders(eventId: string | number): Promise<ApiReminde
   }
 }
 
+function TypeIcon({ type, className }: { type: NotificationType; className?: string }) {
+  if (type === "email") return <Mail className={className ?? "size-4"} />
+  if (type === "push") return <Smartphone className={className ?? "size-4"} />
+  return <MessageCircle className={className ?? "size-4"} />
+}
+
 export function SidebarReminders() {
   const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
@@ -59,33 +62,32 @@ export function SidebarReminders() {
   const [groups, setGroups] = React.useState<EventWithReminders[]>([])
   const [stale, setStale] = React.useState(false)
 
-  // Dialog state
+  // Dialogs
   const [viewOpen, setViewOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [activeEvent, setActiveEvent] = React.useState<EventData | null>(null)
 
-  const rangeNow = React.useMemo(() => new Date(), [])
+  const nowRef = React.useRef(new Date())
+  const rangeNow = nowRef.current
   const rangeEnd = React.useMemo(() => addDays(rangeNow, 30), [rangeNow])
-  // Safety: fetch events out to 37 days to catch "1 week before" reminders that still fall within the next 30 days
+  // Fetch a little beyond 30d so we catch reminders that are "X before" for events slightly outside the 30d window
   const eventsFetchEnd = React.useMemo(() => addDays(rangeNow, 45), [rangeNow])
 
-  const withinWindowOrPastToday = React.useCallback((dt: Date) => {
-    const now = new Date()
-    const startOfToday = new Date(now)
-    startOfToday.setHours(0, 0, 0, 0)
-    // in-window future reminder
-    if (dt >= now && dt <= rangeEnd) return true
-    // today-but-past reminder
-    if (isSameDay(dt, now) && dt < now) return true
-    return false
-  }, [rangeEnd])
+  const withinWindowOrPastToday = React.useCallback(
+    (dt: Date) => {
+      const now = new Date()
+      if (dt >= now && dt <= rangeEnd) return true
+      if (isSameDay(dt, now) && dt < now) return true
+      return false
+    },
+    [rangeEnd]
+  )
 
   const load = React.useCallback(async () => {
     setLoading(true)
     setError(null)
     setStale(false)
     try {
-      // 1) Fetch events in a broad enough window
       const res = await api.get("/events", {
         params: {
           start_date: rangeNow.toISOString(),
@@ -96,14 +98,11 @@ export function SidebarReminders() {
       })
       const events = extractEventsUnknown(res?.data)
 
-      // 2) For each event, fetch reminders
       const results: EventWithReminders[] = []
-      // Fetch reminders sequentially to avoid overwhelming API; short-circuit if we already have >5 viable groups
       for (const ev of events) {
         const reminders = await fetchEventReminders(ev.id)
         if (!reminders.length) continue
 
-        // Compute trigger times and keep ones in our window (or earlier today)
         const withTriggers = reminders
           .map((r) => {
             const trigger = getReminderLocalTriggerDate(r, ev.start_datetime)
@@ -120,11 +119,8 @@ export function SidebarReminders() {
           reminders: withTriggers.map((x) => x.r),
           nextTrigger,
         })
-
-        // Continue scanning all events to ensure correct global ordering, then we will slice to first 5
       }
 
-      // 3) Sort groups by their next upcoming trigger and keep the first 5
       results.sort((a, b) => a.nextTrigger.getTime() - b.nextTrigger.getTime())
       setGroups(results.slice(0, 5))
     } catch (e: any) {
@@ -133,7 +129,7 @@ export function SidebarReminders() {
     } finally {
       setLoading(false)
     }
-  }, [rangeNow, eventsFetchEnd, withinWindowOrPastToday])
+  }, [eventsFetchEnd, rangeNow, withinWindowOrPastToday])
 
   // Lazy load on open
   React.useEffect(() => {
@@ -142,7 +138,7 @@ export function SidebarReminders() {
     }
   }, [open, stale, groups.length, loading, load])
 
-  // Auto-refresh when dialogs signal changes
+  // Auto refresh signal
   React.useEffect(() => {
     const handler = () => {
       if (open) {
@@ -155,23 +151,6 @@ export function SidebarReminders() {
     return () => window.removeEventListener("reminders:refresh", handler as any)
   }, [open, load])
 
-  // Helpers for display
-  function formatEventLine(ev: EventData) {
-    const start = new Date(ev.start_datetime)
-    const end = ev.end_datetime ? new Date(ev.end_datetime) : null
-    if (ev.is_all_day) {
-      if (end && !isSameDay(start, end)) {
-        return `${format(start, "EEE, MMM d")} – ${format(end, "EEE, MMM d")}`
-      }
-      return format(start, "EEE, MMM d")
-    }
-    if (end && !isSameDay(start, end)) {
-      return `${format(start, "EEE, MMM d")} – ${format(end, "EEE, MMM d")}`
-    }
-    return `${format(start, "EEE, MMM d")} • ${format(start, "h:mm a")}${end ? ` – ${format(end, "h:mm a")}` : ""}`
-  }
-
-  // Click handlers
   function openView(ev: EventData) {
     setActiveEvent(ev)
     setViewOpen(true)
@@ -179,6 +158,26 @@ export function SidebarReminders() {
   function openEdit(ev: EventData) {
     setActiveEvent(ev)
     setEditOpen(true)
+  }
+
+  function primaryCategoryColor(ev: EventData) {
+    const color = ev.categories?.[0]?.color
+    return color || "var(--sidebar-ring)"
+  }
+
+  function formatEventDate(ev: EventData) {
+    const d = new Date(ev.start_datetime)
+    return format(d, "EEE, MMM d, yyyy")
+  }
+
+  function formatEventTime(ev: EventData) {
+    if (ev.is_all_day) return "All day"
+    const start = new Date(ev.start_datetime)
+    return format(start, "h:mm a")
+  }
+
+  function formatReminderExact(trigger: Date) {
+    return format(trigger, "EEE, MMM d, h:mm a")
   }
 
   return (
@@ -200,11 +199,22 @@ export function SidebarReminders() {
               {loading && (
                 <div className="space-y-2">
                   {[0, 1, 2].map((i) => (
-                    <div key={i} className="rounded-md border p-2">
+                    <div key={i} className="relative rounded-md border p-3">
+                      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-md bg-accent" />
                       <Skeleton className="h-4 w-2/3" />
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <Skeleton className="h-3 w-28" />
+                        <Skeleton className="h-3 w-16" />
+                      </div>
                       <div className="mt-2 space-y-1">
-                        <Skeleton className="h-3 w-1/2" />
-                        <Skeleton className="h-3 w-1/3" />
+                        <div className="flex items-center justify-between gap-2">
+                          <Skeleton className="h-3 w-40" />
+                          <Skeleton className="h-3 w-5" />
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <Skeleton className="h-3 w-32" />
+                          <Skeleton className="h-3 w-5" />
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -229,54 +239,75 @@ export function SidebarReminders() {
 
               {!loading && !error && groups.length > 0 && (
                 <div className="space-y-2">
-                  {groups.map((g) => (
-                    <div
-                      key={String(g.event.id)}
-                      className="rounded-md border p-2 hover:bg-accent/50 transition-colors"
-                    >
-                      <button
-                        className="text-left w-full"
-                        onClick={() => openView(g.event)}
-                        aria-label={`Open event ${g.event.title}`}
-                        title="Open event"
+                  {groups.map((g) => {
+                    const color = primaryCategoryColor(g.event)
+                    const remindersWithTrigger = g.reminders
+                      .map((r) => ({ r, trigger: getReminderLocalTriggerDate(r, g.event.start_datetime) }))
+                      .sort((a, b) => a.trigger.getTime() - b.trigger.getTime())
+
+                    return (
+                      <div
+                        key={String(g.event.id)}
+                        className="relative rounded-md border p-3 hover:bg-accent/50 transition-colors"
                       >
-                        <div className="flex items-center gap-2">
-                          <CalendarIcon className="size-4 text-muted-foreground" />
-                          <div className="text-sm font-medium truncate">{g.event.title}</div>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                          <Clock className="size-3" />
-                          <span>{formatEventLine(g.event)}</span>
-                        </div>
-                      </button>
-
-                      <div className="mt-2 space-y-1">
-                        {g.reminders.map((r) => (
-                          <div key={r.id} className="text-xs flex items-center justify-between">
-                            <span className="text-muted-foreground">
-                              • {formatReminderTimingForDisplay(r, g.event.start_datetime)}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {formatNotificationTypeLabel(r.notification_type)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEdit(g.event)}
-                          aria-label="Edit Event"
-                          title="Edit Event"
+                        {/* Category color strip */}
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-1 rounded-l-md"
+                          style={{ background: color }}
+                        />
+                        {/* Clickable area for opening View dialog */}
+                        <button
+                          className="text-left w-full"
+                          onClick={() => openView(g.event)}
+                          aria-label={`Open event ${g.event.title}`}
+                          title="Open event"
                         >
-                          <Pencil className="size-4" />
-                          Edit Event
-                        </Button>
+                          {/* Top row: Title + edit icon */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="text-sm font-medium truncate pr-8">{g.event.title}</div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-sm"
+                              className="ml-auto"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openEdit(g.event)
+                              }}
+                              aria-label="Edit Event"
+                              title="Edit Event"
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                          </div>
+
+                          {/* Second row: Event Date (left) | Event Time (right) */}
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1">
+                              <CalendarIcon className="size-3" />
+                              <span>{formatEventDate(g.event)}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {!g.event.is_all_day && <Clock className="size-3" />}
+                              <span>{formatEventTime(g.event)}</span>
+                            </div>
+                          </div>
+
+                          {/* Reminders list: bullet + exact date/time | type icon */}
+                          <div className="mt-2 space-y-1">
+                            {remindersWithTrigger.map(({ r, trigger }) => (
+                              <div key={r.id} className="text-xs flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">
+                                  • {formatReminderExact(trigger)}
+                                </span>
+                                <TypeIcon type={r.notification_type} className="size-4 text-muted-foreground" />
+                              </div>
+                            ))}
+                          </div>
+                        </button>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </SidebarGroupContent>
@@ -294,18 +325,21 @@ export function SidebarReminders() {
           setTimeout(() => setEditOpen(true), 10)
         }}
         onDeleted={() => {
-          // Make the sidebar refresh if the active event was deleted
-          window.dispatchEvent(new CustomEvent("reminders:refresh"))
+          try {
+            window.dispatchEvent(new CustomEvent("reminders:refresh"))
+          } catch {}
         }}
       />
 
-      {/* Edit Event Dialog (Manage Reminders pre-expanded) */}
+      {/* Edit Event Dialog */}
       <EditEventDialog
         open={editOpen}
         onOpenChange={setEditOpen}
         event={activeEvent}
         onUpdated={() => {
-          window.dispatchEvent(new CustomEvent("reminders:refresh"))
+          try {
+            window.dispatchEvent(new CustomEvent("reminders:refresh"))
+          } catch {}
         }}
         openManageInitially
       />
