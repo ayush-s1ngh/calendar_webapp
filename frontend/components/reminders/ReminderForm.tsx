@@ -17,16 +17,16 @@ export function ReminderFormRow({
   value,
   isAllDay,
   eventLocalStart,
-  onChange,
-  onDelete,
+  onChangeAction,
+  onDeleteAction,
   disabled,
   expandWhenOnDesktop = false, // NEW: opt-in expansion for "When" trigger
 }: {
   value: ReminderFormValue
   isAllDay: boolean
   eventLocalStart: Date
-  onChange: (v: ReminderFormValue) => void
-  onDelete: () => void
+  onChangeAction: (v: ReminderFormValue) => void
+  onDeleteAction: () => void
   disabled?: boolean
   expandWhenOnDesktop?: boolean
 }) {
@@ -34,7 +34,7 @@ export function ReminderFormRow({
   const [openCustomAllDay, setOpenCustomAllDay] = React.useState(false)
 
   const handleSaveCustomMinutes = (m: number) => {
-    onChange({
+    onChangeAction({
       ...value,
       mode: "custom" as ReminderFormMode,
       customMinutes: m,
@@ -44,7 +44,7 @@ export function ReminderFormRow({
   }
 
   const handleSaveCustomDateTime = (dt: Date) => {
-    onChange({
+    onChangeAction({
       ...value,
       mode: "custom" as ReminderFormMode,
       customDateTime: dt,
@@ -60,16 +60,16 @@ export function ReminderFormRow({
         <ReminderWhenDropdown
           isAllDay={isAllDay}
           value={value}
-          onChange={(v) => onChange(v)}
-          onOpenCustomTimed={() => setOpenCustomTimed(true)}
-          onOpenCustomAllDay={() => setOpenCustomAllDay(true)}
+          onChangeAction={(v) => onChangeAction(v)}
+          onOpenCustomTimedAction={() => setOpenCustomTimed(true)}
+          onOpenCustomAllDayAction={() => setOpenCustomAllDay(true)}
           disabled={disabled}
           grow={expandWhenOnDesktop}
         />
         {/* How (fixed width from md+) */}
         <ReminderHowDropdown
           value={value.notificationType}
-          onChange={(t) => onChange({ ...value, notificationType: t })}
+          onChange={(t) => onChangeAction({ ...value, notificationType: t })}
           disabled={disabled}
         />
       </div>
@@ -103,7 +103,7 @@ export function ReminderFormRow({
               size="icon-sm"
               aria-label="Delete reminder"
               title="Delete"
-              onClick={onDelete}
+              onClick={onDeleteAction}
               disabled={disabled}
             >
               <Trash2 className="size-4" />

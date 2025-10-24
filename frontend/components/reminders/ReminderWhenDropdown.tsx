@@ -73,17 +73,17 @@ function currentLabel(v: ReminderFormValue, isAllDay: boolean) {
 export function ReminderWhenDropdown({
   isAllDay,
   value,
-  onChange,
-  onOpenCustomTimed,
-  onOpenCustomAllDay,
+  onChangeAction,
+  onOpenCustomTimedAction,
+  onOpenCustomAllDayAction,
   disabled,
   grow = false, // NEW: allow trigger to expand on desktop
 }: {
   isAllDay: boolean
   value: ReminderFormValue
-  onChange: (v: ReminderFormValue) => void
-  onOpenCustomTimed?: () => void
-  onOpenCustomAllDay?: () => void
+  onChangeAction: (v: ReminderFormValue) => void
+  onOpenCustomTimedAction?: () => void
+  onOpenCustomAllDayAction?: () => void
   disabled?: boolean
   grow?: boolean
 }) {
@@ -97,7 +97,7 @@ export function ReminderWhenDropdown({
       customMinutes: undefined,
       customDateTime: undefined,
     }
-    onChange(next)
+    onChangeAction(next)
   }
 
   const triggerClasses = cn(
@@ -146,7 +146,7 @@ export function ReminderWhenDropdown({
             <DropdownMenuItem
               onSelect={(e) => {
                 e.preventDefault()
-                onOpenCustomTimed?.()
+                onOpenCustomTimedAction?.()
               }}
             >
               Custom...
@@ -167,7 +167,7 @@ export function ReminderWhenDropdown({
             <DropdownMenuItem
               onSelect={(e) => {
                 e.preventDefault()
-                onOpenCustomAllDay?.()
+                onOpenCustomAllDayAction?.()
               }}
             >
               Custom...
