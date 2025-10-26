@@ -38,9 +38,7 @@ import {
   ReminderFormValue,
   ReminderFormRow,
   MAX_REMINDERS_PER_EVENT,
-  isDuplicateReminder,
   getReminderComparisonKey,
-  validateRelativeReminder,
   ApiReminder,
   minutesToTimedPreset,
   NotificationType,
@@ -49,6 +47,8 @@ import {
   detectAllDayPresetFromAbsolute,
   detectAllDayPresetFromMinutesBefore,
   allDayPresetToMinutesBefore,
+  AllDayPreset,
+  DEFAULT_ALL_DAY_HOUR,
 } from "@/components/reminders"
 
 export function EditEventDialog({
@@ -82,6 +82,7 @@ export function EditEventDialog({
   const [originalApiReminders, setOriginalApiReminders] = React.useState<ApiReminder[]>([])
   const [remindersLoading, setRemindersLoading] = React.useState(false)
   const [manageOpen, setManageOpen] = React.useState(false)
+  const [reminderErrors, setReminderErrors] = React.useState<Record<number, string>>({})
 
   // Load event details into form and fetch reminders
   React.useEffect(() => {
@@ -129,7 +130,6 @@ export function EditEventDialog({
       try {
         const res = await api.get(`/reminders/event/${encodeURIComponent(String(event.id))}/reminders`)
 
-        // Primary shape: { success: true, data: { reminders: [...] } }, but support fallbacks too
         const extractReminders = (root: any): ApiReminder[] => {
           if (Array.isArray(root)) return root
           if (Array.isArray(root?.reminders)) return root.reminders
@@ -142,9 +142,11 @@ export function EditEventDialog({
         setOriginalApiReminders(apiRems)
         const mapped = mapApiRemindersToForm(apiRems, isAllDay, eventLocalStartForMapping)
         setReminders(mapped)
+        setReminderErrors({})
       } catch {
         setOriginalApiReminders([])
         setReminders([])
+        setReminderErrors({})
       } finally {
         setRemindersLoading(false)
       }
@@ -185,6 +187,7 @@ export function EditEventDialog({
             : { notificationType: r.notificationType, mode: "preset", preset: "at_start" }
         )
       )
+      setReminderErrors({})
       prevIsAllDayRef.current = isAllDay
     }
   }, [isAllDay])
@@ -196,7 +199,6 @@ export function EditEventDialog({
   ): ReminderFormValue[] {
     return apiRems.map((rem) => {
       if (isAllDayEvent) {
-        // Prefer mapping to preset if recognizable
         if (rem.is_relative && typeof rem.minutes_before === "number") {
           const m = Math.max(0, Math.floor(rem.minutes_before))
           const p = detectAllDayPresetFromMinutesBefore(m)
@@ -208,7 +210,6 @@ export function EditEventDialog({
               notificationType: rem.notification_type,
             }
           }
-          // Fall back: show as custom absolute derived from minutes
           const abs = new Date(eventLocalStartForMapping.getTime() - m * 60000)
           return {
             id: rem.id,
@@ -237,7 +238,6 @@ export function EditEventDialog({
           }
         }
 
-        // Fallback default
         return {
           id: rem.id,
           mode: "preset",
@@ -263,7 +263,6 @@ export function EditEventDialog({
             notificationType: rem.notification_type,
           }
         }
-        // Fallback to "at_start"
         return {
           id: rem.id,
           mode: "preset",
@@ -291,10 +290,8 @@ export function EditEventDialog({
           { mode: "preset", preset: "hr_1", notificationType: "email" },
         ]
 
-    const pick = candidates.find(
-      (c) => !isDuplicateReminder(reminders, c, !isAllDay, eventLocalStart)
-    )
-    setReminders((prev) => [...prev, pick ?? candidates[0]])
+    const pick = candidates[0]
+    setReminders((prev) => [...prev, pick])
   }
 
   function updateReminderAt(index: number, next: ReminderFormValue) {
@@ -303,41 +300,26 @@ export function EditEventDialog({
       copy[index] = next
       return copy
     })
+    setReminderErrors((prev) => {
+      const n = { ...prev }
+      delete n[index]
+      return n
+    })
   }
 
   function deleteReminderAt(index: number) {
     setReminders((prev) => prev.filter((_, i) => i !== index))
+    setReminderErrors((prev) => {
+      const n: Record<number, string> = {}
+      Object.entries(prev).forEach(([k, v]) => {
+        const i = Number(k)
+        if (i < index) n[i] = v
+        else if (i > index) n[i - 1] = v
+      })
+      return n
+    })
   }
 
-  function validateRemindersOrToast(): boolean {
-    const seen = new Set<string>()
-    for (const r of reminders) {
-      const key = getReminderComparisonKey(r, !isAllDay, eventLocalStart)
-      if (seen.has(key)) {
-        toast.error("Duplicate reminders are not allowed")
-        return false
-      }
-      seen.add(key)
-    }
-
-    if (!isAllDay) {
-      for (const r of reminders) {
-        let minutes: number | undefined
-        if (r.mode === "custom" && typeof r.customMinutes === "number") {
-          minutes = Math.max(0, Math.floor(r.customMinutes))
-        }
-        if (typeof minutes === "number") {
-          if (!validateRelativeReminder(minutes, eventLocalStart)) {
-            toast.error("Relative reminders must be at or before the event start")
-            return false
-          }
-        }
-      }
-    }
-    return true
-  }
-
-  // Build the expected API shape from a form reminder (for equality checks and API calls)
   function expectedFromForm(
     r: ReminderFormValue,
     opts: { isAllDay: boolean; eventLocalStart: Date }
@@ -421,7 +403,6 @@ export function EditEventDialog({
       }
     }
 
-    // Perform API calls
     try {
       if (deleteIds.length > 0) {
         await api.delete(`/reminders/bulk`, { data: { reminder_ids: deleteIds } })
@@ -444,10 +425,56 @@ export function EditEventDialog({
     }
   }
 
+  // Inline validation: duplicates, past, invalid relative/absolute
+  function validateRemindersInline(): boolean {
+    const errs: Record<number, string> = {}
+    const now = new Date()
+
+    // Duplicates
+    const seen = new Map<string, number>()
+    reminders.forEach((r, idx) => {
+      const key = getReminderComparisonKey(r, !isAllDay, eventLocalStart)
+      if (seen.has(key)) {
+        errs[idx] = `Reminder ${idx + 1}: Duplicate reminder`
+      } else {
+        seen.set(key, idx)
+      }
+    })
+
+    reminders.forEach((r, idx) => {
+      if (errs[idx]) return
+      // Build expected and derive trigger
+      const payload = expectedFromForm(r, { isAllDay, eventLocalStart })
+      let trigger: Date | null = null
+      if (typeof payload.minutes_before === "number") {
+        const minutes = Math.max(0, Math.floor(payload.minutes_before))
+        trigger = new Date(eventLocalStart.getTime() - minutes * 60000)
+        if (!isAllDay && trigger.getTime() > eventLocalStart.getTime()) {
+          errs[idx] = `Reminder ${idx + 1}: Relative reminder must be at or before the event start`
+          return
+        }
+      } else if (payload.reminder_time) {
+        trigger = new Date(payload.reminder_time)
+        if (isAllDay && trigger.getTime() > eventLocalStart.getTime()) {
+          errs[idx] = `Reminder ${idx + 1}: Reminder must be before all-day event start`
+          return
+        }
+      }
+      if (trigger && trigger.getTime() < now.getTime()) {
+        errs[idx] = `Reminder ${idx + 1}: Reminder time cannot be in the past`
+      }
+    })
+
+    setReminderErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
   const onSubmit = async (values: EventFormValues) => {
     if (!event) return
     try {
-      if (!validateRemindersOrToast()) return
+      // Inline validation
+      const ok = validateRemindersInline()
+      if (!ok) return
 
       let start_datetime: string
       let end_datetime: string
@@ -472,7 +499,6 @@ export function EditEventDialog({
         end_datetime = localDateToUtcIso(endD)
       }
 
-      // Update event fields only
       const payload: any = {
         title: values.title,
         description: values.description || undefined,
@@ -484,7 +510,7 @@ export function EditEventDialog({
 
       await api.put(`/events/${encodeURIComponent(String(event.id))}`, payload)
 
-      // Now sync reminders via dedicated endpoints
+      // Sync reminders
       const res = await syncReminders(event.id)
       if (!res.ok) {
         toast.warning("Event updated, but reminders could not be fully synced. Please retry.")
@@ -506,6 +532,8 @@ export function EditEventDialog({
   }
 
   if (!event) return null
+
+  const hasInlineErrors = Object.keys(reminderErrors).length > 0
 
   return (
     <Dialog open={open} onOpenChange={(v) => !isSubmitting && onOpenChangeAction(v)}>
@@ -754,7 +782,6 @@ export function EditEventDialog({
             </div>
           )}
 
-          {/* Reminders Section (summary + manage) */}
           <div className="mt-2 border rounded-md">
             <div className="flex items-center justify-between px-3 py-2">
               <div className="text-sm font-medium">
@@ -803,6 +830,7 @@ export function EditEventDialog({
                       eventLocalStart={eventLocalStart}
                       onChangeAction={(v) => updateReminderAt(idx, v)}
                       onDeleteAction={() => deleteReminderAt(idx)}
+                      errorMessage={reminderErrors[idx]}
                     />
                   ))}
                 </div>
