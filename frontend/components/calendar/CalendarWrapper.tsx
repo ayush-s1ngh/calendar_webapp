@@ -63,9 +63,9 @@ export function Calendar() {
 
   // Dialog states
   const [viewOpen, setViewOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
   const [createInitialDate, setCreateInitialDate] = useState<Date | undefined>(undefined)
   const [createInitialStart, setCreateInitialStart] = useState<Date | undefined>(undefined)
   const [createInitialEnd, setCreateInitialEnd] = useState<Date | undefined>(undefined)
@@ -114,122 +114,118 @@ export function Calendar() {
   }, [selectedCatKey, debouncedSearch])
 
   const handleEventDrop = useCallback(
-    async (arg: EventDropArg) => {
-      const ev = arg.event
-      const id = ev.id
-      const start = ev.start
-      const oldEvent = getOldEventFromDropArg(arg)
-      if (!start) return
-
-      let nextStart: Date
-      let nextEnd: Date
-      let is_all_day: boolean
-
-      const wasAllDay = !!oldEvent?.allDay
-      if (ev.allDay) {
-        // Now all-day
-        const dayStart = startOfDay(start)
-        // Determine the end: keep duration if possible, else default to same-day 23:59:59.999
+      async (arg: EventDropArg) => {
+        const ev = arg.event
+        const id = ev.id
+        const start = ev.start
         const currentEnd = ev.end
-        if (!currentEnd || isSameDay(start, currentEnd)) {
-          nextEnd = new Date(dayStart)
-          nextEnd.setHours(23, 59, 59, 999)
+        if (!start) return
+    
+        const wasAllDay = getOldEventFromDropArg(arg)?.allDay ?? false
+        const isAllDay = Boolean(ev.allDay)
+    
+        let nextStart: Date
+        let nextEnd: Date
+        let is_all_day = isAllDay
+    
+        if (isAllDay) {
+          // All-day event: FullCalendar gives exclusive end, backend needs inclusive
+          const dayStart = startOfDay(start)
+          
+          if (!currentEnd || currentEnd <= start) {
+            // Single-day all-day event
+            nextEnd = new Date(dayStart)
+            nextEnd.setHours(23, 59, 59, 999)
+          } else {
+            // Multi-day: FullCalendar's end is exclusive (e.g., Oct 3 00:00 means ends on Oct 2)
+            // Backend needs inclusive (Oct 2 23:59:59.999)
+            const inclusiveEndDay = addDays(currentEnd, -1) // Convert exclusive to inclusive
+            nextEnd = new Date(startOfDay(inclusiveEndDay))
+            nextEnd.setHours(23, 59, 59, 999)
+          }
+          
+          nextStart = dayStart
+          is_all_day = true
         } else {
-          const inclusiveEndDay = addDays(currentEnd, -1)
-          nextEnd = new Date(startOfDay(inclusiveEndDay))
-          nextEnd.setHours(23, 59, 59, 999)
+          // Timed event
+          if (wasAllDay) {
+            // Transitioning from all-day to timed
+            nextEnd = addHours(start, 1)
+          } else {
+            nextEnd = currentEnd && currentEnd > start ? currentEnd : addHours(start, 1)
+          }
+          nextStart = start
+          is_all_day = false
         }
-
-        nextStart = dayStart
-        is_all_day = true
-      } else {
-        // Timed event
-        const currentEnd = ev.end
-        if (wasAllDay) {
-          nextEnd = addHours(start, 1)
-        } else {
-          nextEnd = currentEnd && currentEnd > start ? currentEnd : addHours(start, 1)
+    
+        const payload = {
+          start_datetime: nextStart.toISOString(),
+          end_datetime: nextEnd.toISOString(),
+          is_all_day,
         }
-        nextStart = start
-        is_all_day = false
-      }
-
-      const payload = {
-        start_datetime: nextStart.toISOString(),
-        end_datetime: nextEnd.toISOString(),
-        is_all_day,
-      }
-
-      try {
-        await api.put(`/events/${encodeURIComponent(id)}`, payload)
-        toast.success("Event updated")
-        if (lastRangeRef.current) await loadRange(lastRangeRef.current)
-        // NEW: notify sidebar reminders to refresh after drag/drop update
+    
         try {
-          window.dispatchEvent(new CustomEvent("reminders:refresh"))
-        } catch {}
-      } catch (err) {
-        arg.revert()
-        toast.error(extractMessage(err, "Failed to update event"))
-      }
-    },
-    [loadRange]
-  )
+          await api.put(`/events/${encodeURIComponent(id)}`, payload)
+          toast.success("Event updated")
+          if (lastRangeRef.current) await loadRange(lastRangeRef.current)
+        } catch (err) {
+          arg.revert()
+          toast.error(extractMessage(err, "Failed to update event"))
+        }
+      },
+      [loadRange]
+    )
 
   const handleEventResize = useCallback(
-    async (arg: EventResizeDoneArg) => {
-      const ev = arg.event
-      const id = ev.id
-      const start = ev.start
-      const currentEnd = ev.end
-      if (!start) return
-
-      let nextEnd: Date
-
-      if (ev.allDay) {
-        // All-day resize: convert exclusive to inclusive
-        const dayStart = startOfDay(start)
-
-        if (!currentEnd || currentEnd <= start) {
-          // Shouldn't happen, but fallback to single-day
-          nextEnd = new Date(dayStart)
-          nextEnd.setHours(23, 59, 59, 999)
+      async (arg: EventResizeDoneArg) => {
+        const ev = arg.event
+        const id = ev.id
+        const start = ev.start
+        const currentEnd = ev.end
+        if (!start) return
+    
+        let nextEnd: Date
+    
+        if (ev.allDay) {
+          // All-day resize: convert exclusive to inclusive
+          const dayStart = startOfDay(start)
+          
+          if (!currentEnd || currentEnd <= start) {
+            // Shouldn't happen, but fallback to single-day
+            nextEnd = new Date(dayStart)
+            nextEnd.setHours(23, 59, 59, 999)
+          } else {
+            // FullCalendar gives exclusive end (e.g., Oct 13 00:00 for ending on Oct 12)
+            const inclusiveEndDay = addDays(currentEnd, -1)
+            nextEnd = new Date(startOfDay(inclusiveEndDay))
+            nextEnd.setHours(23, 59, 59, 999)
+          }
         } else {
-          // FullCalendar gives exclusive end (e.g., Oct 13 00:00 for ending on Oct 12)
-          const inclusiveEndDay = addDays(currentEnd, -1)
-          nextEnd = new Date(startOfDay(inclusiveEndDay))
-          nextEnd.setHours(23, 59, 59, 999)
+          // Timed event: end is already correct
+          if (!currentEnd || currentEnd <= start) {
+            nextEnd = addHours(start, 1)
+          } else {
+            nextEnd = currentEnd
+          }
         }
-      } else {
-        // Timed event: end is already correct
-        if (!currentEnd || currentEnd <= start) {
-          nextEnd = addHours(start, 1)
-        } else {
-          nextEnd = currentEnd
+    
+        const payload = {
+          start_datetime: start.toISOString(),
+          end_datetime: nextEnd.toISOString(),
+          is_all_day: Boolean(ev.allDay),
         }
-      }
-
-      const payload = {
-        start_datetime: start.toISOString(),
-        end_datetime: nextEnd.toISOString(),
-        is_all_day: Boolean(ev.allDay),
-      }
-
-      try {
-        await api.put(`/events/${encodeURIComponent(id)}`, payload)
-        toast.success("Event resized")
-        if (lastRangeRef.current) await loadRange(lastRangeRef.current)
-        // NEW: notify sidebar reminders to refresh after resize update
+    
         try {
-          window.dispatchEvent(new CustomEvent("reminders:refresh"))
-        } catch {}
-      } catch (err) {
-        arg.revert()
-        toast.error(extractMessage(err, "Failed to resize event"))
-      }
-    },
-    [loadRange]
-  )
+          await api.put(`/events/${encodeURIComponent(id)}`, payload)
+          toast.success("Event resized")
+          if (lastRangeRef.current) await loadRange(lastRangeRef.current)
+        } catch (err) {
+          arg.revert()
+          toast.error(extractMessage(err, "Failed to resize event"))
+        }
+      },
+      [loadRange]
+    )
 
   const handleEventClick = useCallback(async (arg: EventClickArg) => {
     const id = arg.event.id
@@ -253,26 +249,34 @@ export function Calendar() {
   }, [])
 
   const handleDateSelect = useCallback((arg: DateSelectArg) => {
-    setCreateInitialDate(undefined)
+      setCreateInitialDate(undefined)
 
-    if (arg.allDay) {
-      const start = startOfDay(arg.start)
-      const end = startOfDay(addDays(arg.end, -1))
-      const startAt = new Date(start)
-      startAt.setHours(0, 0, 0, 0)
-      const endAt = new Date(end)
-      endAt.setHours(23, 59, 59, 999)
-      setCreateInitialStart(startAt)
-      setCreateInitialEnd(endAt)
-      setCreateInitialAllDay(true)
-    } else {
-      setCreateInitialStart(arg.start)
-      setCreateInitialEnd(arg.end)
-      setCreateInitialAllDay(false)
-    }
-    setCreateOpen(true)
-    calendarRef.current?.getApi().unselect()
-  }, [])
+      if (arg.allDay) {
+        // FullCalendar gives exclusive end for all-day selections
+        // User clicks Oct 15 → start=Oct 15 00:00, end=Oct 16 00:00 (exclusive)
+        // User drags Oct 23-28 → start=Oct 23 00:00, end=Oct 29 00:00 (exclusive)
+
+        const isSingleDay = isSameDay(arg.start, addDays(arg.end, -1))
+
+        if (isSingleDay) {
+          // Single day: both start and end should be the same date
+          setCreateInitialStart(arg.start)
+          setCreateInitialEnd(arg.start)
+        } else {
+          // Multi-day: convert exclusive to inclusive for the dialog
+          setCreateInitialStart(arg.start)
+          setCreateInitialEnd(addDays(arg.end, -1)) // Oct 29 → Oct 28
+        }
+      } else {
+        // Timed slot selection
+        setCreateInitialStart(arg.start)
+        setCreateInitialEnd(arg.end)
+      }
+
+      setCreateInitialAllDay(arg.allDay)
+      setCreateOpen(true)
+      calendarRef.current?.getApi().unselect()
+    }, [])
 
   const handleAddEvent = useCallback(() => {
     setCreateInitialDate(new Date())

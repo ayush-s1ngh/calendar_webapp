@@ -39,7 +39,9 @@ import {
   ReminderFormValue,
   ReminderFormRow,
   MAX_REMINDERS_PER_EVENT,
+  isDuplicateReminder,
   getReminderComparisonKey,
+  validateRelativeReminder,
   DEFAULT_ALL_DAY_HOUR,
   AllDayPreset,
   TimedPreset,
@@ -112,7 +114,6 @@ export function CreateEventDialog({
       })
       // reset reminders when dialog opens
       setReminders([])
-      setReminderErrors({})
       prevIsAllDayRef.current = initialAllDay
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,7 +125,6 @@ export function CreateEventDialog({
 
   // Reminders state (managed outside react-hook-form)
   const [reminders, setReminders] = React.useState<ReminderFormValue[]>([])
-  const [reminderErrors, setReminderErrors] = React.useState<Record<number, string>>({})
 
   // Compute event's local start Date for reminder calculations
   const eventLocalStart = React.useMemo(() => {
@@ -148,18 +148,19 @@ export function CreateEventDialog({
         list.map((r) =>
           isAllDay
             ? {
+                // Timed -> All-day: default to 1 day before at 9 AM (stays before start, safe for backend)
                 notificationType: r.notificationType,
                 mode: "preset",
                 preset: "day_1_before_9am",
               }
             : {
+                // All-day -> Timed: default to at_start
                 notificationType: r.notificationType,
                 mode: "preset",
                 preset: "at_start",
               }
         )
       )
-      setReminderErrors({})
       prevIsAllDayRef.current = isAllDay
     }
   }, [isAllDay])
@@ -181,8 +182,10 @@ export function CreateEventDialog({
           { mode: "preset", preset: "hr_1", notificationType: "email" },
         ]
 
-    const pick = candidates[0]
-    setReminders((prev) => [...prev, pick])
+    const pick = candidates.find(
+      (c) => !isDuplicateReminder(reminders, c, !isAllDay, eventLocalStart)
+    )
+    setReminders((prev) => [...prev, pick ?? candidates[0]])
   }
 
   function updateReminderAt(index: number, next: ReminderFormValue) {
@@ -191,24 +194,43 @@ export function CreateEventDialog({
       copy[index] = next
       return copy
     })
-    setReminderErrors((prev) => {
-      const n = { ...prev }
-      delete n[index]
-      return n
-    })
   }
 
   function deleteReminderAt(index: number) {
     setReminders((prev) => prev.filter((_, i) => i !== index))
-    setReminderErrors((prev) => {
-      const n: Record<number, string> = {}
-      Object.entries(prev).forEach(([k, v]) => {
-        const i = Number(k)
-        if (i < index) n[i] = v
-        else if (i > index) n[i - 1] = v
-      })
-      return n
-    })
+  }
+
+  function validateRemindersOrToast(): boolean {
+    // Duplicates check
+    const seen = new Set<string>()
+    for (const r of reminders) {
+      const key = getReminderComparisonKey(r, !isAllDay, eventLocalStart)
+      if (seen.has(key)) {
+        toast.error("Duplicate reminders are not allowed")
+        return false
+      }
+      seen.add(key)
+    }
+
+    // Relative validation for timed events
+    if (!isAllDay) {
+      for (const r of reminders) {
+        let minutes: number | undefined
+        if (r.mode === "custom" && typeof r.customMinutes === "number") {
+          minutes = Math.max(0, Math.floor(r.customMinutes))
+        } else if (r.mode === "preset") {
+          // For timed presets, they map to fixed minutes; handled server-side anyway
+        }
+        if (typeof minutes === "number") {
+          if (!validateRelativeReminder(minutes, eventLocalStart)) {
+            toast.error("Relative reminders must be at or before the event start")
+            return false
+          }
+        }
+      }
+    }
+
+    return true
   }
 
   // Helpers for building all-day relative minutes for presets
@@ -248,7 +270,7 @@ export function CreateEventDialog({
     return Math.max(0, diffMin)
   }
 
-  // Build reminders payload locally
+  // Build reminders payload locally to ensure all-day presets use minutes_before (so they follow date changes)
   function buildRemindersPayload(
     list: ReminderFormValue[],
     opts: { isAllDay: boolean; eventLocalStart: Date }
@@ -256,7 +278,7 @@ export function CreateEventDialog({
     const { isAllDay, eventLocalStart } = opts
     return list.map((r) => {
       if (!isAllDay) {
-        // Timed events: relative
+        // Timed events: always relative
         let minutes: number
         if (r.mode === "custom" && typeof r.customMinutes === "number") {
           minutes = Math.max(0, Math.floor(r.customMinutes))
@@ -275,7 +297,7 @@ export function CreateEventDialog({
         return { minutes_before: minutes, notification_type: r.notificationType }
       }
 
-      // All-day:
+      // All-day events:
       if (r.mode === "custom" && r.customDateTime) {
         const dt = new Date(r.customDateTime)
         if (dt.getTime() < eventLocalStart.getTime()) {
@@ -290,6 +312,7 @@ export function CreateEventDialog({
 
       const preset = (r.preset as AllDayPreset) || "day_1_before_9am"
       if (preset === "same_day_9am") {
+        // This preset is after midnight; keep absolute to avoid backend "after start" validation
         const abs = allDayPresetTargetLocalDate(eventLocalStart, preset)
         return { reminder_time: localDateToUtcIso(abs), notification_type: r.notificationType }
       }
@@ -298,61 +321,9 @@ export function CreateEventDialog({
     })
   }
 
-  // Inline validation: duplicates, past, invalid relative/absolute
-  function validateRemindersInline(): boolean {
-    const errs: Record<number, string> = {}
-    const now = new Date()
-
-    // Duplicates
-    const seen = new Map<string, number>()
-    reminders.forEach((r, idx) => {
-      const key = getReminderComparisonKey(r, !isAllDay, eventLocalStart)
-      if (seen.has(key)) {
-        errs[idx] = `Reminder ${idx + 1}: Duplicate reminder`
-      } else {
-        seen.set(key, idx)
-      }
-    })
-
-    const payloads = buildRemindersPayload(reminders, { isAllDay, eventLocalStart })
-
-    reminders.forEach((r, idx) => {
-      if (errs[idx]) return
-      const payload = payloads[idx]
-
-      // Compute trigger time for validations
-      let trigger: Date | null = null
-      if (typeof payload.minutes_before === "number") {
-        const minutes = Math.max(0, Math.floor(payload.minutes_before))
-        trigger = new Date(eventLocalStart.getTime() - minutes * 60000)
-        // Timed invalid (should not be after start)
-        if (!isAllDay && trigger.getTime() > eventLocalStart.getTime()) {
-          errs[idx] = `Reminder ${idx + 1}: Relative reminder must be at or before the event start`
-          return
-        }
-        // All-day relative is always before start by construction
-      } else if (payload.reminder_time) {
-        trigger = new Date(payload.reminder_time)
-        if (isAllDay && trigger.getTime() > eventLocalStart.getTime()) {
-          errs[idx] = `Reminder ${idx + 1}: Reminder must be before all-day event start`
-          return
-        }
-      }
-
-      if (trigger && trigger.getTime() < now.getTime()) {
-        errs[idx] = `Reminder ${idx + 1}: Reminder time cannot be in the past`
-      }
-    })
-
-    setReminderErrors(errs)
-    return Object.keys(errs).length === 0
-  }
-
   const onSubmit = async (values: EventFormValues) => {
     try {
-      // Inline validation (no toasts)
-      const ok = validateRemindersInline()
-      if (!ok) return
+      if (!validateRemindersOrToast()) return
 
       let start_datetime: string
       let end_datetime: string
@@ -366,7 +337,6 @@ export function CreateEventDialog({
         end_datetime = localDateToUtcIso(endD)
       } else {
         if (!values.start_time || !values.end_time) {
-          // Keep minimal toast for missing required fields
           toast.error("Start and end times are required for timed events")
           return
         }
@@ -402,13 +372,11 @@ export function CreateEventDialog({
       onOpenChangeAction(false)
       onCreatedAction?.()
     } catch (err: unknown) {
-      // Keep a general toast for unexpected failures
       toast.error(getErrorMessage(err, "Failed to create event"))
     }
   }
 
   const addDisabled = reminders.length >= MAX_REMINDERS_PER_EVENT
-  const hasInlineErrors = Object.keys(reminderErrors).length > 0
 
   return (
     <Dialog open={open} onOpenChange={(v) => !isSubmitting && onOpenChangeAction(v)}>
@@ -651,6 +619,10 @@ export function CreateEventDialog({
             </div>
           )}
 
+          {errors.end_date && (
+            <p className="text-destructive text-xs">{errors.end_date.message}</p>
+          )}
+
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium">Reminders</div>
@@ -691,7 +663,6 @@ export function CreateEventDialog({
                   onChangeAction={(v) => updateReminderAt(idx, v)}
                   onDeleteAction={() => deleteReminderAt(idx)}
                   expandWhenOnDesktop
-                  errorMessage={reminderErrors[idx]}
                 />
               ))}
             </div>

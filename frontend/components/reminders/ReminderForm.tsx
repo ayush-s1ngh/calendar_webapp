@@ -20,8 +20,7 @@ export function ReminderFormRow({
   onChangeAction,
   onDeleteAction,
   disabled,
-  expandWhenOnDesktop = false,
-  errorMessage, // NEW: inline error
+  expandWhenOnDesktop = false, // NEW: opt-in expansion for "When" trigger
 }: {
   value: ReminderFormValue
   isAllDay: boolean
@@ -30,7 +29,6 @@ export function ReminderFormRow({
   onDeleteAction: () => void
   disabled?: boolean
   expandWhenOnDesktop?: boolean
-  errorMessage?: string
 }) {
   const [openCustomTimed, setOpenCustomTimed] = React.useState(false)
   const [openCustomAllDay, setOpenCustomAllDay] = React.useState(false)
@@ -56,68 +54,64 @@ export function ReminderFormRow({
   }
 
   return (
-    <div className="flex flex-col rounded-md border bg-card/60 px-3 py-2">
-      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
-        <div className="flex-1 flex flex-col sm:flex-row gap-2">
-          <ReminderWhenDropdown
-            isAllDay={isAllDay}
-            value={value}
-            onChangeAction={(v) => onChangeAction(v)}
-            onOpenCustomTimedAction={() => setOpenCustomTimed(true)}
-            onOpenCustomAllDayAction={() => setOpenCustomAllDay(true)}
-            disabled={disabled}
-            grow={expandWhenOnDesktop}
-          />
-          <ReminderHowDropdown
-            value={value.notificationType}
-            onChange={(t) => onChangeAction({ ...value, notificationType: t })}
-            disabled={disabled}
-          />
-        </div>
-
-        <div className="flex items-center gap-1 ml-auto">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                aria-label="Edit reminder"
-                title="Edit"
-                onClick={() => {
-                  if (isAllDay) setOpenCustomAllDay(true)
-                  else setOpenCustomTimed(true)
-                }}
-                disabled={disabled}
-              >
-                <Pencil className="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="destructive"
-                size="icon-sm"
-                aria-label="Delete reminder"
-                title="Delete"
-                onClick={onDeleteAction}
-                disabled={disabled}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
-          </Tooltip>
-        </div>
+    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 rounded-md border bg-card/60 px-3 py-2">
+      <div className="flex-1 flex flex-col sm:flex-row gap-2">
+        {/* When (can expand on desktop if requested by parent) */}
+        <ReminderWhenDropdown
+          isAllDay={isAllDay}
+          value={value}
+          onChangeAction={(v) => onChangeAction(v)}
+          onOpenCustomTimedAction={() => setOpenCustomTimed(true)}
+          onOpenCustomAllDayAction={() => setOpenCustomAllDay(true)}
+          disabled={disabled}
+          grow={expandWhenOnDesktop}
+        />
+        {/* How (fixed width from md+) */}
+        <ReminderHowDropdown
+          value={value.notificationType}
+          onChange={(t) => onChangeAction({ ...value, notificationType: t })}
+          disabled={disabled}
+        />
       </div>
 
-      {errorMessage && (
-        <div className="text-xs text-destructive mt-1">{errorMessage}</div>
-      )}
+      <div className="flex items-center gap-1 ml-auto">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label="Edit reminder"
+              title="Edit"
+              onClick={() => {
+                if (isAllDay) setOpenCustomAllDay(true)
+                else setOpenCustomTimed(true)
+              }}
+              disabled={disabled}
+            >
+              <Pencil className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Edit</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon-sm"
+              aria-label="Delete reminder"
+              title="Delete"
+              onClick={onDeleteAction}
+              disabled={disabled}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Delete</TooltipContent>
+        </Tooltip>
+      </div>
 
       {!isAllDay && (
         <CustomReminderDialog
