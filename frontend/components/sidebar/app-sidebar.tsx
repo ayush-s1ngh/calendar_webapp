@@ -1,13 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-  BellIcon,
-  Command,
-  Settings2,
-} from "lucide-react"
 
-import { SidebarMain } from "@/components/sidebar/sidebar-main"
 import { SidebarUser } from "@/components/sidebar/sidebar-user"
 import {
   Sidebar,
@@ -27,24 +21,6 @@ const data = {
     email: "Test Email",
     avatar: "",
   },
-  sidebarMain: [
-    {
-      title: "Reminders",
-      url: "",
-      icon: BellIcon,
-      isActive: true,
-    },
-    {
-      title: "Tasks",
-      url: "",
-      icon: Command,
-    },
-    {
-      title: "Settings",
-      url: "",
-      icon: Settings2,
-    },
-  ],
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -54,7 +30,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <SidebarFilters />
         <SidebarReminders /> {/* NEW */}
-        <SidebarMain items={data.sidebarMain} />
       </SidebarContent>
       <SidebarFooter>
         <SidebarUser user={data.user} />
