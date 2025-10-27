@@ -1,17 +1,11 @@
 "use client"
 
-import {
-  BadgeCheck,
-  Bell,
-  ChevronsUpDown,
-  LogOut,
-} from "lucide-react"
+import * as React from "react"
+import { BadgeCheck, Bell, ChevronsUpDown, LogOut } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +21,18 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { authStore } from "@/store/auth"
+
+function getInitials(name: string) {
+  try {
+    const parts = name.trim().split(/\s+/).filter(Boolean)
+    if (parts.length === 0) return "U"
+    if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+    return (parts[0]!.slice(0, 1) + parts[1]!.slice(0, 1)).toUpperCase()
+  } catch {
+    return "U"
+  }
+}
 
 export function SidebarUser({
   user,
@@ -38,6 +44,24 @@ export function SidebarUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const router = useRouter()
+  const logout = authStore((s) => s.logout)
+
+  const handleProfile = React.useCallback(() => {
+    router.push("/profile")
+  }, [router])
+
+  const handleNotifications = React.useCallback(() => {
+    toast.info("Notifications coming soon")
+  }, [])
+
+  const handleLogout = React.useCallback(() => {
+    try {
+      logout()
+    } finally {
+      router.replace("/login")
+    }
+  }, [logout, router])
 
   return (
     <SidebarMenu>
@@ -50,7 +74,9 @@ export function SidebarUser({
             >
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                <AvatarFallback className="rounded-lg">
+                  {getInitials(user.name)}
+                </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
@@ -69,7 +95,9 @@ export function SidebarUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                  <AvatarFallback className="rounded-lg">
+                    {getInitials(user.name)}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
@@ -77,18 +105,36 @@ export function SidebarUser({
                 </div>
               </div>
             </DropdownMenuLabel>
+
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault()
+                  handleProfile()
+                }}
+              >
                 <BadgeCheck />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault()
+                  handleNotifications()
+                }}
+              >
                 <Bell />
                 Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
+
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault()
+                handleLogout()
+              }}
+            >
               <LogOut />
               Log out
             </DropdownMenuItem>
