@@ -11,28 +11,27 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { SidebarFilters } from "@/components/sidebar/sidebar-filters"
-import { SidebarReminders } from "@/components/sidebar/sidebar-reminders" // NEW
-
-// This is sample data.
-const data = {
-  // user data should be fetched from auth store
-  user: {
-    name: "Test Name",
-    email: "Test Email",
-    avatar: "",
-  },
-}
+import { SidebarReminders } from "@/components/sidebar/sidebar-reminders"
+import { authStore } from "@/store/auth"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const user = authStore((s) => s.user)
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader />
       <SidebarContent>
         <SidebarFilters />
-        <SidebarReminders /> {/* NEW */}
+        <SidebarReminders />
       </SidebarContent>
       <SidebarFooter>
-        <SidebarUser user={data.user} />
+        <SidebarUser
+          user={{
+            name: user?.username || "User",
+            email: user?.email || "",
+            avatar: "", // backend doesn't provide avatar yet
+          }}
+        />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
