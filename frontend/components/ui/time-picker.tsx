@@ -61,10 +61,14 @@ export function SimpleTimePicker({
   const [hour, setHour] = useState(use12HourFormat ? +format(value, 'hh') : value.getHours());
   const [minute, setMinute] = useState(Math.round(value.getMinutes() / 5) * 5); // Round to nearest 5
 
+  // Only propagate changes when the computed time actually differs.
+  // Also, do not depend on `value` here to avoid bouncing the same value back up forever.
   useEffect(() => {
-    // Always set seconds to 0
-    onChange(buildTime({ use12HourFormat, value, formatStr, hour, minute, second: 0, ampm }));
-  }, [hour, minute, ampm, formatStr, use12HourFormat, onChange, value]);
+    const next = buildTime({ use12HourFormat, value, formatStr, hour, minute, second: 0, ampm });
+    if (!value || next.getTime() !== value.getTime()) {
+      onChange(next);
+    }
+  }, [hour, minute, ampm, formatStr, use12HourFormat, onChange]); // intentionally exclude `value`
 
   const _hourIn24h = useMemo(() => {
     return use12HourFormat ? (hour % 12) + ampm * 12 : hour;

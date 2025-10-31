@@ -78,6 +78,8 @@ export function SidebarReminders() {
   const [error, setError] = React.useState<string | null>(null)
   const [groups, setGroups] = React.useState<EventWithReminders[]>([])
   const [stale, setStale] = React.useState(false)
+  // NEW: track if we've already attempted a load to avoid infinite loops when there are no reminders
+  const [loadedOnce, setLoadedOnce] = React.useState(false)
 
   // Dialogs
   const [viewOpen, setViewOpen] = React.useState(false)
@@ -104,6 +106,7 @@ export function SidebarReminders() {
     setLoading(true)
     setError(null)
     setStale(false)
+    setLoadedOnce(true) // mark attempt immediately to prevent re-trigger loop on empty results
     try {
       const res = await api.get("/events", {
         params: {
@@ -148,24 +151,24 @@ export function SidebarReminders() {
     }
   }, [eventsFetchEnd, rangeNow, withinWindowOrPastToday])
 
-  // Lazy load on open
+  // Lazy load: only on first open, or when stale flag is set.
   React.useEffect(() => {
-    if (open && (stale || groups.length === 0) && !loading) {
+    if (open && !loading && (stale || !loadedOnce)) {
       void load()
     }
-  }, [open, stale, groups.length, loading, load])
+  }, [open, loading, stale, loadedOnce, load])
 
   // Auto refresh signal
   React.useEffect(() => {
-      const handler: EventListener = () => {
-        if (open) {
-          void load()
-        } else {
-          setStale(true)
-        }
+    const handler: EventListener = () => {
+      if (open) {
+        void load()
+      } else {
+        setStale(true)
       }
-      window.addEventListener("reminders:refresh", handler)
-      return () => window.removeEventListener("reminders:refresh", handler)
+    }
+    window.addEventListener("reminders:refresh", handler)
+    return () => window.removeEventListener("reminders:refresh", handler)
   }, [open, load])
 
   function openView(ev: EventData) {
@@ -275,7 +278,7 @@ export function SidebarReminders() {
                           aria-label={`Open event ${g.event.title}`}
                           title="Open event"
                         >
-                        {/* Top row: Title + edit icon */}
+                        {/* Top row: Title */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="text-sm font-medium truncate pr-8">{g.event.title}</div>
                           </div>
