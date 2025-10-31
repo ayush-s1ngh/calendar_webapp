@@ -16,6 +16,11 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
+type ErrorLike = { response?: { data?: { message?: string } } }
+function getMessage(err: unknown, fallback: string) {
+  return (err as ErrorLike)?.response?.data?.message ?? fallback
+}
+
 export default function ForgotPasswordForm() {
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -26,9 +31,8 @@ export default function ForgotPasswordForm() {
       await api.post("/auth/request-password-reset", { email: values.email })
       toast.success("If an account exists, a reset link has been sent.")
       reset()
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Failed to request password reset"
-      toast.error(message)
+    } catch (err: unknown) {
+      toast.error(getMessage(err, "Failed to request password reset"))
     }
   }
 
@@ -40,7 +44,7 @@ export default function ForgotPasswordForm() {
             Forgot your password?
           </h1>
           <p className="mt-2 text-center text-sm">
-            Enter the email address associated with your account and we'll send you a link to reset your password.
+            Enter the email address associated with your account and We&apos;ll send you a link to reset your password.
           </p>
         </div>
         <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>

@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation"
 import api from "@/lib/api"
 import { toast } from "sonner"
 
+type ErrorLike = { response?: { data?: { message?: string } } }
+function getMessage(err: unknown, fallback: string) {
+  return (err as ErrorLike)?.response?.data?.message ?? fallback
+}
+
 export default function VerifyEmailPage({ params }: { params: { token: string } }) {
   const router = useRouter()
   React.useEffect(() => {
@@ -13,9 +18,8 @@ export default function VerifyEmailPage({ params }: { params: { token: string } 
         await api.post(`/auth/verify-email/${encodeURIComponent(params.token)}`)
         toast.success("Email successfully verified. Please login.")
         router.replace("/login")
-      } catch (e: any) {
-        const msg = e?.response?.data?.message || "Email verification failed"
-        toast.error(msg)
+      } catch (e: unknown) {
+        toast.error(getMessage(e, "Email verification failed"))
         router.replace("/login")
       }
     }

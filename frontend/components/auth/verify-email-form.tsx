@@ -4,14 +4,18 @@ import { Button } from "@/components/ui/button"
 import api from "@/lib/api"
 import { toast } from "sonner"
 
+type ErrorLike = { response?: { data?: { message?: string } } }
+function getMessage(err: unknown, fallback: string) {
+  return (err as ErrorLike)?.response?.data?.message ?? fallback
+}
+
 export default function VerifyEmailDialog() {
   const resend = async () => {
     try {
       await api.post("/auth/resend-verification")
       toast.success("Verification email sent successfully")
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Failed to resend verification email"
-      toast.error(message)
+    } catch (err: unknown) {
+      toast.error(getMessage(err, "Failed to resend verification email"))
     }
   }
 

@@ -20,6 +20,11 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
+type ErrorLike = { response?: { data?: { message?: string } } }
+function getMessage(err: unknown, fallback: string) {
+  return (err as ErrorLike)?.response?.data?.message ?? fallback
+}
+
 export function LoginForm({
   className,
   ...props
@@ -45,9 +50,8 @@ export function LoginForm({
       setUser(data?.user)
       toast.success("Login successful")
       router.replace("/calendar")
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Invalid credentials"
-      toast.error(message)
+    } catch (err: unknown) {
+      toast.error(getMessage(err, "Invalid credentials"))
       reset({ username: "", password: "" })
     }
   }

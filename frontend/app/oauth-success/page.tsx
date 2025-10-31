@@ -6,6 +6,11 @@ import { authStore } from "@/store/auth"
 import api from "@/lib/api"
 import { toast } from "sonner"
 
+type ErrorLike = { response?: { data?: { message?: string } } }
+function getMessage(err: unknown, fallback: string) {
+  return (err as ErrorLike)?.response?.data?.message ?? fallback
+}
+
 export default function OAuthSuccessPage() {
   const params = useSearchParams()
   const router = useRouter()
@@ -26,8 +31,8 @@ export default function OAuthSuccessPage() {
         const me = await api.get("/users/me")
         setUser(me.data?.data)
         router.replace("/calendar")
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || "OAuth handling failed")
+      } catch (e: unknown) {
+        toast.error(getMessage(e, "OAuth handling failed"))
         router.replace("/login")
       }
     }

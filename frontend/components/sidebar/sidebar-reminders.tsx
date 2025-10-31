@@ -27,11 +27,17 @@ type EventWithReminders = {
   nextTrigger: Date
 }
 
-function extractEventsUnknown(root: any): EventData[] {
-  if (Array.isArray(root)) return root as EventData[]
-  if (Array.isArray(root?.events)) return root.events as EventData[]
-  if (Array.isArray(root?.data)) return root.data as EventData[]
-  if (Array.isArray(root?.data?.events)) return root.data.events as EventData[]
+function extractEventsUnknown(root: unknown): EventData[] {
+  const r = root as Record<string, unknown> | unknown[]
+  if (Array.isArray(r)) return r as EventData[]
+  if (r && typeof r === "object") {
+    const obj = r as Record<string, unknown>
+    if (Array.isArray(obj.events)) return obj.events as EventData[]
+    if (Array.isArray(obj.data)) return obj.data as EventData[]
+    if (obj.data && typeof obj.data === "object" && Array.isArray((obj.data as any).events)) {
+      return (obj.data as any).events as EventData[]
+    }
+  }
   return []
 }
 
@@ -53,6 +59,11 @@ function TypeIcon({ type, className }: { type: NotificationType; className?: str
   if (type === "email") return <Mail className={className ?? "size-4"} />
   if (type === "push") return <Smartphone className={className ?? "size-4"} />
   return <MessageCircle className={className ?? "size-4"} />
+}
+
+type ErrorLike = { response?: { data?: { message?: string } } }
+function getMessage(err: unknown, fallback: string) {
+  return (err as ErrorLike)?.response?.data?.message ?? fallback
 }
 
 export function SidebarReminders() {
@@ -123,8 +134,8 @@ export function SidebarReminders() {
 
       results.sort((a, b) => a.nextTrigger.getTime() - b.nextTrigger.getTime())
       setGroups(results.slice(0, 5))
-    } catch (e: any) {
-      setError(e?.response?.data?.message || "Unable to load reminders")
+    } catch (e: unknown) {
+      setError(getMessage(e, "Unable to load reminders"))
       setGroups([])
     } finally {
       setLoading(false)

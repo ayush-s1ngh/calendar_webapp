@@ -13,6 +13,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 
+type ErrorLike = { response?: { data?: { message?: string } } }
+function getMessage(err: unknown, fallback: string) {
+  return (err as ErrorLike)?.response?.data?.message ?? fallback
+}
+
 export default function ProfilePage() {
   const router = useRouter()
   const tokens = authStore((s) => s.tokens)
@@ -54,9 +59,8 @@ export default function ProfilePage() {
       const updated = res?.data?.data || res?.data
       setUser(updated || { ...(user || {}), username, email })
       toast.success("Profile updated")
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || "Failed to update profile"
-      toast.error(msg)
+    } catch (err: unknown) {
+      toast.error(getMessage(err, "Failed to update profile"))
     } finally {
       setSaving(false)
     }

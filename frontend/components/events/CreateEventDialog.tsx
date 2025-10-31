@@ -47,6 +47,8 @@ import {
   TimedPreset,
 } from "@/components/reminders"
 
+type ReminderPayload = { minutes_before?: number; reminder_time?: string; notification_type: string }
+
 export function CreateEventDialog({
   open,
   onOpenChangeAction,
@@ -274,7 +276,7 @@ export function CreateEventDialog({
   function buildRemindersPayload(
     list: ReminderFormValue[],
     opts: { isAllDay: boolean; eventLocalStart: Date }
-  ): Array<{ minutes_before?: number; reminder_time?: string; notification_type: string }> {
+  ): ReminderPayload[] {
     const { isAllDay, eventLocalStart } = opts
     return list.map((r) => {
       if (!isAllDay) {
@@ -348,7 +350,15 @@ export function CreateEventDialog({
         end_datetime = localDateToUtcIso(endD)
       }
 
-      const payload: any = {
+      const payload: {
+        title: string
+        description?: string
+        start_datetime: string
+        end_datetime: string
+        is_all_day: boolean
+        category_ids: number[]
+        reminders?: ReminderPayload[]
+      } = {
         title: values.title,
         description: values.description || undefined,
         start_datetime,

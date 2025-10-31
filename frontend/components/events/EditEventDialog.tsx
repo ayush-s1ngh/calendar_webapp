@@ -49,7 +49,11 @@ import {
   detectAllDayPresetFromAbsolute,
   detectAllDayPresetFromMinutesBefore,
   allDayPresetToMinutesBefore,
+  AllDayPreset,
+  TimedPreset,
 } from "@/components/reminders"
+
+type ReminderPayload = { minutes_before?: number; reminder_time?: string; notification_type: NotificationType }
 
 export function EditEventDialog({
   open,
@@ -130,11 +134,17 @@ export function EditEventDialog({
         const res = await api.get(`/reminders/event/${encodeURIComponent(String(event.id))}/reminders`)
 
         // Primary shape: { success: true, data: { reminders: [...] } }, but support fallbacks too
-        const extractReminders = (root: any): ApiReminder[] => {
-          if (Array.isArray(root)) return root
-          if (Array.isArray(root?.reminders)) return root.reminders
-          if (Array.isArray(root?.data)) return root.data
-          if (Array.isArray(root?.data?.reminders)) return root.data.reminders
+        const extractReminders = (root: unknown): ApiReminder[] => {
+          const r = root as Record<string, unknown> | unknown[]
+          if (Array.isArray(r)) return r as ApiReminder[]
+          if (r && typeof r === "object") {
+            const obj = r as Record<string, unknown>
+            if (Array.isArray(obj.reminders)) return obj.reminders as ApiReminder[]
+            if (Array.isArray(obj.data)) return obj.data as ApiReminder[]
+            if (obj.data && typeof obj.data === "object" && Array.isArray((obj.data as any).reminders)) {
+              return (obj.data as any).reminders as ApiReminder[]
+            }
+          }
           return []
         }
 
@@ -341,7 +351,7 @@ export function EditEventDialog({
   function expectedFromForm(
     r: ReminderFormValue,
     opts: { isAllDay: boolean; eventLocalStart: Date }
-  ): { minutes_before?: number; reminder_time?: string; notification_type: NotificationType } {
+  ): ReminderPayload {
     if (opts.isAllDay) {
       if (r.mode === "custom" && r.customDateTime) {
         const dt = new Date(r.customDateTime)
@@ -354,7 +364,7 @@ export function EditEventDialog({
         }
         return { reminder_time: localDateToUtcIso(dt), notification_type: r.notificationType }
       }
-      const preset = (r.preset as any) || "day_1_before_9am"
+      const preset = (r.preset as AllDayPreset | undefined) ?? "day_1_before_9am"
       if (preset === "same_day_9am") {
         return {
           reminder_time: calculateAbsoluteReminderTime(opts.eventLocalStart, preset),
@@ -367,7 +377,7 @@ export function EditEventDialog({
     const minutes =
       r.mode === "custom" && typeof r.customMinutes === "number"
         ? Math.max(0, Math.floor(r.customMinutes))
-        : presetToMinutes((r.preset as any) || "at_start")
+        : presetToMinutes(((r.preset as TimedPreset | undefined) ?? "at_start"))
     return { minutes_before: minutes, notification_type: r.notificationType }
   }
 
@@ -393,8 +403,8 @@ export function EditEventDialog({
 
   async function syncReminders(eventId: number | string) {
     const byIdCurrent = new Map<number, ReminderFormValue>()
-    const creates: Array<{ minutes_before?: number; reminder_time?: string; notification_type: NotificationType }> = []
-    const updates: Array<{ id: number; payload: { minutes_before?: number; reminder_time?: string; notification_type: NotificationType } }> = []
+    const creates: ReminderPayload[] = []
+    const updates: Array<{ id: number; payload: ReminderPayload }> = []
     const deleteIds: number[] = []
 
     for (const r of reminders) {
@@ -473,7 +483,14 @@ export function EditEventDialog({
       }
 
       // Update event fields only
-      const payload: any = {
+      const payload: {
+        title: string
+        description?: string
+        start_datetime: string
+        end_datetime: string
+        is_all_day: boolean
+        category_ids: number[]
+      } = {
         title: values.title,
         description: values.description || undefined,
         start_datetime,

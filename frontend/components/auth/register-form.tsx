@@ -24,6 +24,11 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
+type ErrorLike = { response?: { data?: { message?: string } } }
+function getMessage(err: unknown, fallback: string) {
+  return (err as ErrorLike)?.response?.data?.message ?? fallback
+}
+
 export function RegisterForm({
   className,
   ...props
@@ -42,9 +47,8 @@ export function RegisterForm({
       })
       toast.success("Registered successfully. Please verify your email.")
       router.replace("/login")
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Registration failed"
-      toast.error(message)
+    } catch (err: unknown) {
+      toast.error(getMessage(err, "Registration failed"))
       reset({ password: "", confirmPassword: "" })
     }
   }

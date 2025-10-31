@@ -72,18 +72,24 @@ export function ViewEventDialog({
       setRemindersError(null)
       try {
         const res = await api.get(`/reminders/event/${encodeURIComponent(String(eventId))}/reminders`)
-        const extract = (root: any): ApiReminder[] => {
-          if (Array.isArray(root)) return root
-          if (Array.isArray(root?.reminders)) return root.reminders
-          if (Array.isArray(root?.data)) return root.data
-          if (Array.isArray(root?.data?.reminders)) return root.data.reminders
+        const extract = (root: unknown): ApiReminder[] => {
+          const r = root as Record<string, unknown> | unknown[]
+          if (Array.isArray(r)) return r as ApiReminder[]
+          if (r && typeof r === "object") {
+            const obj = r as Record<string, unknown>
+            if (Array.isArray(obj.reminders)) return obj.reminders as ApiReminder[]
+            if (Array.isArray(obj.data)) return obj.data as ApiReminder[]
+            if (obj.data && typeof obj.data === "object" && Array.isArray((obj.data as any).reminders)) {
+              return (obj.data as any).reminders as ApiReminder[]
+            }
+          }
           return []
         }
         const list = extract(res?.data) ?? []
         if (!cancelled) setReminders(list)
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          setRemindersError(err?.response?.data?.message || "Failed to load reminders")
+          setRemindersError(getErrorMessage(err, "Failed to load reminders"))
           setReminders([])
         }
       } finally {
