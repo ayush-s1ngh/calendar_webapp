@@ -158,15 +158,13 @@ export function SidebarFilters() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={async () => {
-          // Do NOT auto-select the new category
-          // Refresh list to ensure dropdown shows normalized data
           await loadCategories()
         }}
       />
 
       <CategoryManagerDialog
         open={managerOpen}
-        onOpenChangeAction={setManagerOpen}
+        onOpenChange={setManagerOpen}
       />
     </>
   )

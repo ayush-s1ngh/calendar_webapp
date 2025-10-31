@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect } from "react"
+import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
-export default function ResetPasswordIndexPage() {
+function ResetPasswordHandler() {
   const router = useRouter()
   const params = useSearchParams()
 
@@ -12,10 +13,17 @@ export default function ResetPasswordIndexPage() {
     if (token) {
       router.replace(`/reset-password/${encodeURIComponent(token)}`)
     } else {
-      // No token in query → send user to the email entry page
       router.replace("/forgot-password")
     }
   }, [params, router])
 
   return null
+}
+
+export default function ResetPasswordIndexPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordHandler />
+    </Suspense>
+  )
 }

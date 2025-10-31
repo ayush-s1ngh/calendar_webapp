@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { authStore } from "@/store/auth"
 import api from "@/lib/api"
@@ -11,7 +12,7 @@ function getMessage(err: unknown, fallback: string) {
   return (err as ErrorLike)?.response?.data?.message ?? fallback
 }
 
-export default function OAuthSuccessPage() {
+function OAuthSuccessHandler() {
   const params = useSearchParams()
   const router = useRouter()
   const setTokens = authStore((s) => s.setTokens)
@@ -42,4 +43,12 @@ export default function OAuthSuccessPage() {
   }, [])
 
   return null
+}
+
+export default function OAuthSuccessPage() {
+  return (
+    <Suspense fallback={null}>
+      <OAuthSuccessHandler />
+    </Suspense>
+  )
 }

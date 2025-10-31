@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect } from "react"
+import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
-export default function VerifyEmailIndexPage() {
+function VerifyEmailHandler() {
   const router = useRouter()
   const params = useSearchParams()
 
@@ -17,4 +18,12 @@ export default function VerifyEmailIndexPage() {
   }, [params, router])
 
   return null
+}
+
+export default function VerifyEmailIndexPage() {
+  return (
+    <Suspense fallback={null}>
+      <VerifyEmailHandler />
+    </Suspense>
+  )
 }
