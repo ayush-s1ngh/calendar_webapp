@@ -3,22 +3,28 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { authStore } from "@/store/auth"
-import {SidebarInset, SidebarProvider, SidebarTrigger} from "@/components/ui/sidebar";
-import {AppSidebar} from "@/components/sidebar/app-sidebar";
-import {Separator} from "@/components/ui/separator";
-import {Calendar} from "@/components/calendar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/sidebar/app-sidebar"
+import { Separator } from "@/components/ui/separator"
+import { Calendar } from "@/components/calendar"
 
+/**
+ * Protected /calendar page with application sidebar and FullCalendar.
+ * - Hydrates auth store on mount
+ * - Redirects unauthenticated users to /login
+ */
 export default function CalendarPage() {
   const router = useRouter()
   const tokens = authStore((s) => s.tokens)
-  const user = authStore((s) => s.user)
   const hydrate = authStore((s) => s.hydrate)
   const hydrated = authStore((s) => s.hydrated)
 
+  // Ensure store is hydrated on first render
   React.useEffect(() => {
     hydrate()
   }, [hydrate])
 
+  // After hydration, if no access token, navigate to login
   React.useEffect(() => {
     if (!hydrated) return
     if (!tokens?.access_token) {
@@ -26,11 +32,10 @@ export default function CalendarPage() {
     }
   }, [hydrated, tokens, router])
 
+  // Avoid flashing UI until auth state is known
   if (!tokens?.access_token) {
     return null
   }
-
-  const showVerify = user && user.email_verified === false
 
   return (
     <SidebarProvider>

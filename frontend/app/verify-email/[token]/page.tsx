@@ -10,8 +10,12 @@ function getMessage(err: unknown, fallback: string) {
   return (err as ErrorLike)?.response?.data?.message ?? fallback
 }
 
+/**
+ * Verifies email using the token from URL, then redirects to /login.
+ */
 export default function VerifyEmailPage({ params }: { params: { token: string } }) {
   const router = useRouter()
+
   React.useEffect(() => {
     async function run() {
       try {

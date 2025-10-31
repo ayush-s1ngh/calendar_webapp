@@ -18,6 +18,11 @@ function getMessage(err: unknown, fallback: string) {
   return (err as ErrorLike)?.response?.data?.message ?? fallback
 }
 
+/**
+ * Profile page for updating user details and theme preference.
+ * - Requires authentication; redirects to /login if not authenticated
+ * - Provides local form state with optimistic updates on success
+ */
 export default function ProfilePage() {
   const router = useRouter()
   const tokens = authStore((s) => s.tokens)
@@ -32,15 +37,18 @@ export default function ProfilePage() {
   const [email, setEmail] = React.useState(user?.email || "")
   const [saving, setSaving] = React.useState(false)
 
+  // Ensure store is hydrated
   React.useEffect(() => {
     hydrate()
   }, [hydrate])
 
+  // Redirect unauthenticated users
   React.useEffect(() => {
     if (!hydrated) return
     if (!tokens?.access_token) router.replace("/login")
   }, [hydrated, tokens, router])
 
+  // Sync form when user changes
   React.useEffect(() => {
     setUsername(user?.username || "")
     setEmail(user?.email || "")
@@ -74,6 +82,7 @@ export default function ProfilePage() {
     }
   }
 
+  // Local component for theme selection chips
   const ThemeChip = ({
     value,
     label,
@@ -111,6 +120,7 @@ export default function ProfilePage() {
         </Button>
       </div>
 
+      {/* User info form */}
       <form className="mt-6 rounded-lg border p-4" onSubmit={onSave}>
         <h2 className="text-sm font-medium text-muted-foreground">User Information</h2>
         <Separator className="my-3" />
@@ -150,6 +160,7 @@ export default function ProfilePage() {
         </div>
       </form>
 
+      {/* Appearance settings */}
       <div className="mt-6 rounded-lg border p-4">
         <h2 className="text-sm font-medium text-muted-foreground">Appearance</h2>
         <Separator className="my-3" />

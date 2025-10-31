@@ -12,6 +12,11 @@ function getMessage(err: unknown, fallback: string) {
   return (err as ErrorLike)?.response?.data?.message ?? fallback
 }
 
+/**
+ * Handles OAuth redirect from the provider.
+ * - Reads ?token from the URL
+ * - Sets access token, fetches user, and redirects to /calendar
+ */
 function OAuthSuccessHandler() {
   const params = useSearchParams()
   const router = useRouter()
@@ -28,7 +33,7 @@ function OAuthSuccessHandler() {
 
     async function run(t: string) {
       try {
-        setTokens({ access_token: t }, true)
+        setTokens({ access_token: t }) // persist by default
         const me = await api.get("/users/me")
         setUser(me.data?.data)
         router.replace("/calendar")
@@ -39,6 +44,7 @@ function OAuthSuccessHandler() {
     }
 
     run(token)
+    // We intentionally run this effect only once after mount to process the token
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
