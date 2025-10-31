@@ -77,10 +77,16 @@ export function ViewEventDialog({
           if (Array.isArray(r)) return r as ApiReminder[]
           if (r && typeof r === "object") {
             const obj = r as Record<string, unknown>
-            if (Array.isArray(obj.reminders)) return obj.reminders as ApiReminder[]
-            if (Array.isArray(obj.data)) return obj.data as ApiReminder[]
-            if (obj.data && typeof obj.data === "object" && Array.isArray((obj.data as any).reminders)) {
-              return (obj.data as any).reminders as ApiReminder[]
+            if (Array.isArray((obj as { reminders?: unknown }).reminders)) {
+              return (obj as { reminders: ApiReminder[] }).reminders
+            }
+            if (Array.isArray((obj as { data?: unknown }).data)) {
+              return (obj as { data: ApiReminder[] }).data
+            }
+            if (obj.data && typeof obj.data === "object") {
+              const d = obj.data as Record<string, unknown>
+              const maybeRems = (d as { reminders?: unknown }).reminders
+              if (Array.isArray(maybeRems)) return maybeRems as ApiReminder[]
             }
           }
           return []

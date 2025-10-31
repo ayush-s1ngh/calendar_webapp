@@ -32,10 +32,16 @@ function extractEventsUnknown(root: unknown): EventData[] {
   if (Array.isArray(r)) return r as EventData[]
   if (r && typeof r === "object") {
     const obj = r as Record<string, unknown>
-    if (Array.isArray(obj.events)) return obj.events as EventData[]
-    if (Array.isArray(obj.data)) return obj.data as EventData[]
-    if (obj.data && typeof obj.data === "object" && Array.isArray((obj.data as any).events)) {
-      return (obj.data as any).events as EventData[]
+    if (Array.isArray((obj as { events?: unknown }).events)) {
+      return (obj as { events: EventData[] }).events
+    }
+    if (Array.isArray((obj as { data?: unknown }).data)) {
+      return (obj as { data: EventData[] }).data
+    }
+    if (obj.data && typeof obj.data === "object") {
+      const d = obj.data as Record<string, unknown>
+      const maybeEvents = (d as { events?: unknown }).events
+      if (Array.isArray(maybeEvents)) return maybeEvents as EventData[]
     }
   }
   return []
@@ -151,15 +157,15 @@ export function SidebarReminders() {
 
   // Auto refresh signal
   React.useEffect(() => {
-    const handler = () => {
-      if (open) {
-        void load()
-      } else {
-        setStale(true)
+      const handler: EventListener = () => {
+        if (open) {
+          void load()
+        } else {
+          setStale(true)
+        }
       }
-    }
-    window.addEventListener("reminders:refresh", handler as any)
-    return () => window.removeEventListener("reminders:refresh", handler as any)
+      window.addEventListener("reminders:refresh", handler)
+      return () => window.removeEventListener("reminders:refresh", handler)
   }, [open, load])
 
   function openView(ev: EventData) {

@@ -1,7 +1,7 @@
 /**
  * Simple Time Picker Component
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Clock, ChevronDownIcon, CheckIcon } from 'lucide-react';
@@ -25,7 +25,7 @@ import {
 } from 'date-fns';
 
 interface SimpleTimeOption {
-  value: any;
+  value: number;
   label: string;
   disabled?: boolean;
 }
@@ -64,7 +64,7 @@ export function SimpleTimePicker({
   useEffect(() => {
     // Always set seconds to 0
     onChange(buildTime({ use12HourFormat, value, formatStr, hour, minute, second: 0, ampm }));
-  }, [hour, minute, ampm, formatStr, use12HourFormat]);
+  }, [hour, minute, ampm, formatStr, use12HourFormat, onChange, value]);
 
   const _hourIn24h = useMemo(() => {
     return use12HourFormat ? (hour % 12) + ampm * 12 : hour;
@@ -142,7 +142,6 @@ export function SimpleTimePicker({
       }
     }, 1);
     return () => clearTimeout(timeoutId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const onHourChange = useCallback(
@@ -202,12 +201,15 @@ export function SimpleTimePicker({
     return format(value, use12HourFormat ? 'hh:mm a' : 'HH:mm');
   }, [value, use12HourFormat]);
 
+  const popoverId = useId();
+
   return (
     <Popover open={open} onOpenChange={setOpen} modal={modal}>
       <PopoverTrigger asChild>
         <div
           role="combobox"
           aria-expanded={open}
+          aria-controls={popoverId}
           className={cn(
             'flex h-9 px-3 items-center justify-between cursor-pointer font-normal border border-input rounded-md text-sm shadow-sm',
             disabled && 'opacity-50 cursor-not-allowed'
@@ -219,7 +221,7 @@ export function SimpleTimePicker({
           <ChevronDownIcon className="ml-2 size-4 shrink-0 opacity-50" />
         </div>
       </PopoverTrigger>
-      <PopoverContent className="p-0" side="top">
+      <PopoverContent className="p-0" side="top" id={popoverId}>
         <div className="flex-col gap-2 p-2">
           <div className="flex h-56 grow">
             <ScrollArea className="h-full flex-grow">

@@ -1,4 +1,4 @@
-import axios from "axios"
+import axios, { AxiosHeaders, RawAxiosRequestHeaders } from "axios"
 import { authStore } from "@/store/auth"
 
 const api = axios.create({
@@ -10,14 +10,17 @@ api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("access_token")
     if (token) {
-      const h = config.headers as any
-      if (h && typeof h.set === "function") {
-        h.set("Authorization", `Bearer ${token}`)
+      // Ensure headers exists
+      if (!config.headers) {
+        config.headers = new AxiosHeaders();
+        (config.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`)
+      }
+      const headers = config.headers
+      // Axios v1 may use AxiosHeaders with a .set method
+      if (headers && typeof (headers as AxiosHeaders).set === "function") {
+        ;(headers as AxiosHeaders).set("Authorization", `Bearer ${token}`)
       } else {
-        config.headers = {
-          ...(config.headers || {}),
-          Authorization: `Bearer ${token}`,
-        } as any
+        ;(config.headers as RawAxiosRequestHeaders)["Authorization"] = `Bearer ${token}`
       }
     }
   }
