@@ -1,12 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-# Explicitly set environment to production for both app and bootstrap
+# Ensure we're in the backend directory (works even if Render root dir isn't set)
+cd "$(dirname "$0")"
+
 export FLASK_ENV=production
-export FLASK_APP="run.py:create_app('production')"
 
 # Initialize database schema directly from models (no Alembic)
-python scripts/init_db.py
+python -m scripts.init_db
 
 # Start the server
-gunicorn --bind 0.0.0.0:$PORT "app:create_app('production')"
+exec gunicorn --bind 0.0.0.0:$PORT "app:create_app('production')"

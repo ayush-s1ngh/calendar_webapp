@@ -1,0 +1,1 @@
+# marks 'scripts' as a package so you can run: python -m scripts.init_db
