@@ -4,6 +4,7 @@ from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from apscheduler.schedulers.background import BackgroundScheduler
+import os
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -20,9 +21,18 @@ def create_app(config_name='development'):
     app.config.from_object(config_by_name[config_name])
 
     # Initialize extensions with app
-    origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"]
-    CORS(app, resources={r"/api/*": {"origins": origins}}, supports_credentials=False, methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"], allow_headers=["Content-Type","Authorization"], max_age=86400)
-    # CORS(app)
+    # Allow origins from env FRONTEND_URL (comma-separated), fallback to '*'
+    allowed_origins = os.getenv('FRONTEND_URL', '*')
+    origins = [o.strip() for o in allowed_origins.split(',')] if allowed_origins else ['*']
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": origins}},
+        supports_credentials=False,
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
+        max_age=86400
+    )
+
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)

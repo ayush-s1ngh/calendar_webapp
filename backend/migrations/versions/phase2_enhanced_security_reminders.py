@@ -7,6 +7,7 @@ Create Date: 2025-06-29 15:33:54.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from alembic import context
 
 # revision identifiers, used by Alembic.
 revision = 'phase2_enhanced_security_reminders'
@@ -73,12 +74,19 @@ def upgrade():
         batch_op.add_column(sa.Column('minutes_before', sa.Integer(), nullable=True))
         batch_op.add_column(sa.Column('is_relative', sa.Boolean(), nullable=True))
 
-    # Set default values for existing records
-    op.execute("UPDATE users SET email_verified = 0 WHERE email_verified IS NULL")
-    op.execute("UPDATE users SET account_status = 'active' WHERE account_status IS NULL")
-    op.execute("UPDATE users SET failed_login_attempts = 0 WHERE failed_login_attempts IS NULL")
-    op.execute("UPDATE reminders SET notification_type = 'email' WHERE notification_type IS NULL")
-    op.execute("UPDATE reminders SET is_relative = 1 WHERE is_relative IS NULL")
+    # Set default values for existing records (dialect-aware)
+    if context.get_impl().dialect.name == 'postgresql':
+        op.execute("UPDATE users SET email_verified = false WHERE email_verified IS NULL")
+        op.execute("UPDATE users SET account_status = 'active' WHERE account_status IS NULL")
+        op.execute("UPDATE users SET failed_login_attempts = 0 WHERE failed_login_attempts IS NULL")
+        op.execute("UPDATE reminders SET notification_type = 'email' WHERE notification_type IS NULL")
+        op.execute("UPDATE reminders SET is_relative = true WHERE is_relative IS NULL")
+    else:
+        op.execute("UPDATE users SET email_verified = 0 WHERE email_verified IS NULL")
+        op.execute("UPDATE users SET account_status = 'active' WHERE account_status IS NULL")
+        op.execute("UPDATE users SET failed_login_attempts = 0 WHERE failed_login_attempts IS NULL")
+        op.execute("UPDATE reminders SET notification_type = 'email' WHERE notification_type IS NULL")
+        op.execute("UPDATE reminders SET is_relative = 1 WHERE is_relative IS NULL")
 
 def downgrade():
     # Remove new columns from reminders table
