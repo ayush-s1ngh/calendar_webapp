@@ -1,5 +1,20 @@
 "use client"
 
+/**
+ * Auth store (canonical).
+ * - Manages user, tokens, and theme preference
+ * - Persists tokens to localStorage (client-only)
+ * - Provides a hydrate() action to initialize state from localStorage on app start
+ *
+ * Notes:
+ * - Keep this as the single source of truth for auth state. Do not duplicate this store.
+ * - Actions:
+ *    setUser(user): sets the current user object (null to clear)
+ *    setTokens(tokens, persist=true): sets tokens and optionally persists them
+ *    setTheme(theme): updates preferred theme ("light" | "dark" | "system")
+ *    logout(): clears tokens (localStorage) and user
+ *    hydrate(): reads tokens from localStorage once to initialize state
+ */
 import { create } from "zustand"
 
 export type User = {
@@ -19,11 +34,11 @@ type AuthState = {
   user: User | null
   tokens: Tokens | null
   theme: "light" | "dark" | "system"
+  hydrated: boolean
   setUser: (user: User | null) => void
   setTokens: (tokens: Tokens | null, persist?: boolean) => void
   setTheme: (theme: "light" | "dark" | "system") => void
   logout: () => void
-  hydrated: boolean
   hydrate: () => void
 }
 
@@ -32,7 +47,9 @@ export const authStore = create<AuthState>((set) => ({
   tokens: null,
   theme: "system",
   hydrated: false,
+
   setUser: (user) => set({ user }),
+
   setTokens: (tokens, persist = true) =>
     set(() => {
       if (typeof window !== "undefined" && persist && tokens) {
@@ -47,7 +64,9 @@ export const authStore = create<AuthState>((set) => ({
       }
       return { tokens }
     }),
+
   setTheme: (theme) => set({ theme }),
+
   logout: () =>
     set(() => {
       if (typeof window !== "undefined") {
@@ -56,6 +75,7 @@ export const authStore = create<AuthState>((set) => ({
       }
       return { user: null, tokens: null }
     }),
+
   hydrate: () =>
     set((state) => {
       if (state.hydrated) return state

@@ -1,7 +1,24 @@
 "use client"
 
+/**
+ * Category store.
+ * - Manages category list, selection filters, and CRUD operations
+ * - Persists nothing by default; relies on API for source of truth
+ * - Prevents deletion of the last remaining category (client-side safeguard)
+ *
+ * Actions:
+ *  - loadCategories(): fetches categories (envelope-tolerant)
+ *  - toggleCategory(id): toggles id in the selectedCategoryIds Set
+ *  - clearFilters(): clears category filters
+ *  - setSearchTerm(term): updates search term used by calendar filtering
+ *  - createCategory(payload), updateCategory(id, payload), deleteCategory(id): CRUD
+ * Helpers:
+ *  - getCategoryById(id)
+ *  - canDeleteCategory(id): returns false if deleting would leave zero categories
+ */
 import { create } from "zustand"
 import api from "@/lib/api"
+import { DEFAULT_PER_PAGE } from "@/lib/constants"
 
 export interface Category {
   id: number
@@ -73,12 +90,14 @@ export const categoryStore = create<CategoryState>((set, get) => ({
   selectedCategoryIds: new Set<number>(),
   isLoading: false,
   searchTerm: "",
+
   loadCategories: async () => {
     set({ isLoading: true })
     try {
-      const res = await api.get("/categories", { params: { per_page: 100 } })
+      const res = await api.get("/categories", { params: { per_page: DEFAULT_PER_PAGE } })
       const root = (res?.data ?? {}) as Root
       const data = (root.data ?? root) as unknown
+
       const categories =
         (isRecord(data) && "categories" in data
           ? ((data as CategoriesEnvelope).categories ?? [])
@@ -97,9 +116,7 @@ export const categoryStore = create<CategoryState>((set, get) => ({
             color: "#ffffff",
             description: "Default category",
           })
-          set((state) => ({
-            categories: [created],
-          }))
+          set({ categories: [created] })
         } catch {
           // ignore auto-create failure
         }
@@ -108,6 +125,7 @@ export const categoryStore = create<CategoryState>((set, get) => ({
       set({ isLoading: false })
     }
   },
+
   toggleCategory: (id: number) => {
     const current = get().selectedCategoryIds
     const next = new Set(current)
@@ -115,7 +133,9 @@ export const categoryStore = create<CategoryState>((set, get) => ({
     else next.add(id)
     set({ selectedCategoryIds: next })
   },
+
   clearFilters: () => set({ selectedCategoryIds: new Set<number>() }),
+
   setSearchTerm: (term: string) => set({ searchTerm: term }),
 
   // CRUD
@@ -128,6 +148,7 @@ export const categoryStore = create<CategoryState>((set, get) => ({
     set((state) => ({ categories: [cat, ...state.categories] }))
     return cat
   },
+
   updateCategory: async (id, payload) => {
     const res = await api.put(`/categories/${encodeURIComponent(String(id))}`, payload)
     const cat = extractCategoryFromUnknown(res?.data)
@@ -139,11 +160,12 @@ export const categoryStore = create<CategoryState>((set, get) => ({
     }))
     return cat
   },
+
   deleteCategory: async (id) => {
     const state = get()
 
-    // SAFEGUARD: Prevent deletion if it's the last category
-    if (state.categories.length <= 1) {
+    // SAFEGUARD: Prevent deletion if it would leave zero categories
+    if (!state.canDeleteCategory(id)) {
       throw new Error("Cannot delete the last remaining category. At least one category must exist.")
     }
 
@@ -159,8 +181,7 @@ export const categoryStore = create<CategoryState>((set, get) => ({
   },
 
   canDeleteCategory: (id: number) => {
-    const state = get()
-    // Can only delete if there's more than one category
-    return state.categories.length > 1
+    const remaining = get().categories.filter((c) => c.id !== id).length
+    return remaining >= 1
   },
 }))
