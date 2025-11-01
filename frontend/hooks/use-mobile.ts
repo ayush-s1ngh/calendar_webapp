@@ -1,19 +1,16 @@
-import * as React from "react"
+/**
+ * useIsMobile
+ * Determines if the viewport is considered "mobile" based on a breakpoint (default 768px).
+ * - Internally uses useMediaQuery("(max-width: BREAKPOINT-1px)")
+ * - SSR-safe: returns false on the server by default to avoid hydration flicker
+ *
+ * Tip: If your design tokens define breakpoints, import them here to keep parity with CSS.
+ */
+import { useMediaQuery } from "./use-media-query"
 
-const MOBILE_BREAKPOINT = 768
+export const MOBILE_BREAKPOINT = 768
 
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
-
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
-
-  return !!isMobile
+export function useIsMobile(breakpoint: number = MOBILE_BREAKPOINT): boolean {
+  const query = `(max-width: ${breakpoint - 1}px)`
+  return useMediaQuery(query, { ssrFallback: false })
 }
