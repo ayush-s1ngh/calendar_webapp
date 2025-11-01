@@ -1,5 +1,6 @@
 "use client"
 
+import { JSX } from "react"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -33,13 +34,35 @@ import {
 import api from "@/lib/api"
 import { format, isSameDay } from "date-fns"
 import { utcIsoToLocalDate } from "@/lib/time"
-import { EventData, getErrorMessage } from "./event-utils"
+import { getErrorMessage } from "@/lib/errors"
+import type { EventData } from "./event-utils"
 import { ApiReminder, getReminderLocalTriggerDate } from "@/components/reminders"
 
 function TypeIcon({ type, className }: { type: "email" | "push" | "sms"; className?: string }) {
   if (type === "email") return <Mail className={className ?? "size-4"} />
   if (type === "push") return <Smartphone className={className ?? "size-4"} />
   return <MessageCircle className={className ?? "size-4"} />
+}
+
+// Centralized fetcher for event reminders (shape-tolerant, no any)
+async function fetchRemindersForEvent(eventId: string | number): Promise<ApiReminder[]> {
+  try {
+    const res = await api.get(`/reminders/event/${encodeURIComponent(String(eventId))}/reminders`)
+    const d = res?.data as unknown
+    if (Array.isArray(d)) return d as ApiReminder[]
+    if (d && typeof d === "object") {
+      const obj = d as Record<string, unknown>
+      if (Array.isArray(obj.reminders)) return obj.reminders as ApiReminder[]
+      if (Array.isArray(obj.data)) return obj.data as ApiReminder[]
+      if (obj.data && typeof obj.data === "object") {
+        const inner = obj.data as Record<string, unknown>
+        if (Array.isArray(inner.reminders)) return inner.reminders as ApiReminder[]
+      }
+    }
+    return []
+  } catch {
+    return []
+  }
 }
 
 export function ViewEventDialog({
@@ -54,7 +77,7 @@ export function ViewEventDialog({
   event: EventData | null
   onEditClickAction?: () => void
   onDeletedAction?: () => void
-}) {
+}): JSX.Element | null {
   // Keep hooks in a stable order across renders
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
@@ -71,27 +94,7 @@ export function ViewEventDialog({
       setRemindersLoading(true)
       setRemindersError(null)
       try {
-        const res = await api.get(`/reminders/event/${encodeURIComponent(String(eventId))}/reminders`)
-        const extract = (root: unknown): ApiReminder[] => {
-          const r = root as Record<string, unknown> | unknown[]
-          if (Array.isArray(r)) return r as ApiReminder[]
-          if (r && typeof r === "object") {
-            const obj = r as Record<string, unknown>
-            if (Array.isArray((obj as { reminders?: unknown }).reminders)) {
-              return (obj as { reminders: ApiReminder[] }).reminders
-            }
-            if (Array.isArray((obj as { data?: unknown }).data)) {
-              return (obj as { data: ApiReminder[] }).data
-            }
-            if (obj.data && typeof obj.data === "object") {
-              const d = obj.data as Record<string, unknown>
-              const maybeRems = (d as { reminders?: unknown }).reminders
-              if (Array.isArray(maybeRems)) return maybeRems as ApiReminder[]
-            }
-          }
-          return []
-        }
-        const list = extract(res?.data) ?? []
+        const list = await fetchRemindersForEvent(eventId)
         if (!cancelled) setReminders(list)
       } catch (err: unknown) {
         if (!cancelled) {

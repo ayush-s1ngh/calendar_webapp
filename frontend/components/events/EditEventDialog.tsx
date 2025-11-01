@@ -1,7 +1,8 @@
 "use client"
 
+import { JSX } from "react"
 import * as React from "react"
-import { useForm, Controller } from "react-hook-form"
+import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,27 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { toast } from "sonner"
-import { Calendar as CalendarIcon, ChevronDown, ChevronUp } from "lucide-react"
 import api from "@/lib/api"
 import { categoryStore } from "@/store/category"
-import { format } from "date-fns"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { SimpleTimePicker } from "@/components/ui/time-picker"
-import { cn } from "@/lib/utils"
 import { localDateToUtcIso, utcIsoToLocalDate } from "@/lib/time"
-import { eventSchema, EventFormValues, EventData, getErrorMessage } from "./event-utils"
+import { getErrorMessage } from "@/lib/errors"
+import { EventBasicsFields } from "./EventBasicsFields"
+import { eventSchema, type EventFormValues, type EventData } from "./event-utils"
 
 // Reminders
 import {
@@ -42,18 +29,51 @@ import {
   getReminderComparisonKey,
   validateRelativeReminder,
   ApiReminder,
-  minutesToTimedPreset,
   NotificationType,
   presetToMinutes,
   calculateAbsoluteReminderTime,
   detectAllDayPresetFromAbsolute,
   detectAllDayPresetFromMinutesBefore,
   allDayPresetToMinutesBefore,
-  AllDayPreset,
-  TimedPreset,
+  roundToNearestFiveMinutes,
+  minutesToTimedPreset,
+  type AllDayPreset,
+  type TimedPreset,
 } from "@/components/reminders"
 
-type ReminderPayload = { minutes_before?: number; reminder_time?: string; notification_type: NotificationType }
+type ReminderPayload = {
+  minutes_before?: number
+  reminder_time?: string
+  notification_type: NotificationType
+}
+
+// Centralized fetcher for event reminders (shape-tolerant, no any)
+async function fetchRemindersForEvent(eventId: string | number): Promise<ApiReminder[]> {
+  try {
+    const res = await api.get(`/reminders/event/${encodeURIComponent(String(eventId))}/reminders`)
+    const root = res?.data as unknown
+
+    if (Array.isArray(root)) return root as ApiReminder[]
+    if (root && typeof root === "object") {
+      const obj = root as Record<string, unknown>
+      const fromKey = (key: string): ApiReminder[] => {
+        const val = obj[key]
+        return Array.isArray(val) ? (val as ApiReminder[]) : []
+      }
+      if (Array.isArray(obj.reminders)) return obj.reminders as ApiReminder[]
+      if (Array.isArray(obj.data)) return obj.data as ApiReminder[]
+      if (obj.data && typeof obj.data === "object") {
+        const dataObj = obj.data as Record<string, unknown>
+        if (Array.isArray(dataObj.reminders)) return dataObj.reminders as ApiReminder[]
+      }
+      const attempts = fromKey("reminders") || fromKey("data")
+      if (attempts.length) return attempts
+    }
+    return []
+  } catch {
+    return []
+  }
+}
 
 export function EditEventDialog({
   open,
@@ -67,7 +87,7 @@ export function EditEventDialog({
   event: EventData | null
   onUpdatedAction?: () => void
   openManageInitially?: boolean
-}) {
+}): JSX.Element | null {
   const categories = categoryStore((s) => s.categories)
 
   const {
@@ -92,20 +112,12 @@ export function EditEventDialog({
     async function init() {
       if (!open || !event) return
       setManageOpen(openManageInitially)
+
       const startDate = utcIsoToLocalDate(event.start_datetime)
       const endDate = event.end_datetime
         ? utcIsoToLocalDate(event.end_datetime)
         : new Date(startDate.getTime() + 60 * 60 * 1000)
       const isAllDay = Boolean(event.is_all_day)
-
-      // Round times to 5-minute increments for picker
-      const roundToNearestFiveMinutes = (date: Date): Date => {
-        const rounded = new Date(date)
-        const minutes = rounded.getMinutes()
-        const roundedMinutes = Math.round(minutes / 5) * 5
-        rounded.setMinutes(roundedMinutes >= 60 ? 55 : roundedMinutes, 0, 0)
-        return rounded
-      }
 
       reset({
         title: event.title,
@@ -128,33 +140,9 @@ export function EditEventDialog({
         return new Date(startDate)
       })()
 
-      // fetch reminders for this event
       setRemindersLoading(true)
       try {
-        const res = await api.get(`/reminders/event/${encodeURIComponent(String(event.id))}/reminders`)
-
-        // Primary shape: { success: true, data: { reminders: [...] } }, but support fallbacks too
-        const extractReminders = (root: unknown): ApiReminder[] => {
-          const r = root as Record<string, unknown> | unknown[]
-          if (Array.isArray(r)) return r as ApiReminder[]
-          if (r && typeof r === "object") {
-            const obj = r as Record<string, unknown>
-            if (Array.isArray((obj as { reminders?: unknown }).reminders)) {
-              return (obj as { reminders: ApiReminder[] }).reminders
-            }
-            if (Array.isArray((obj as { data?: unknown }).data)) {
-              return (obj as { data: ApiReminder[] }).data
-            }
-            if (obj.data && typeof obj.data === "object") {
-              const d = obj.data as Record<string, unknown>
-              const maybeRems = (d as { reminders?: unknown }).reminders
-              if (Array.isArray(maybeRems)) return maybeRems as ApiReminder[]
-            }
-          }
-          return []
-        }
-
-        const apiRems = extractReminders(res?.data)
+        const apiRems = await fetchRemindersForEvent(event.id)
         setOriginalApiReminders(apiRems)
         const mapped = mapApiRemindersToForm(apiRems, isAllDay, eventLocalStartForMapping)
         setReminders(mapped)
@@ -263,12 +251,12 @@ export function EditEventDialog({
       } else {
         const m = typeof rem.minutes_before === "number" ? rem.minutes_before : undefined
         if (typeof m === "number") {
-          const p = minutesToTimedPreset(m)
-          if (p) {
+          const preset = minutesToTimedPreset(m)
+          if (preset) {
             return {
               id: rem.id,
               mode: "preset",
-              preset: p,
+              preset,
               notificationType: rem.notification_type,
             }
           }
@@ -370,7 +358,7 @@ export function EditEventDialog({
         }
         return { reminder_time: localDateToUtcIso(dt), notification_type: r.notificationType }
       }
-      const preset = (r.preset as AllDayPreset | undefined) ?? "day_1_before_9am"
+      const preset: AllDayPreset = (r.preset as AllDayPreset | undefined) ?? "day_1_before_9am"
       if (preset === "same_day_9am") {
         return {
           reminder_time: calculateAbsoluteReminderTime(opts.eventLocalStart, preset),
@@ -387,7 +375,11 @@ export function EditEventDialog({
     return { minutes_before: minutes, notification_type: r.notificationType }
   }
 
-  function areEqualReminder(apiRem: ApiReminder, form: ReminderFormValue, opts: { isAllDay: boolean; eventLocalStart: Date }) {
+  function areEqualReminder(
+    apiRem: ApiReminder,
+    form: ReminderFormValue,
+    opts: { isAllDay: boolean; eventLocalStart: Date }
+  ) {
     const expect = expectedFromForm(form, opts)
     if (apiRem.is_relative) {
       const m = typeof apiRem.minutes_before === "number" ? apiRem.minutes_before : undefined
@@ -437,7 +429,6 @@ export function EditEventDialog({
       }
     }
 
-    // Perform API calls
     try {
       if (deleteIds.length > 0) {
         await api.delete(`/reminders/bulk`, { data: { reminder_ids: deleteIds } })
@@ -543,239 +534,14 @@ export function EditEventDialog({
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="title">Title *</Label>
-            <Input
-              id="title"
-              placeholder="Event title"
-              {...register("title")}
-              aria-invalid={!!errors.title}
-            />
-            {errors.title && <p className="text-destructive text-xs">{errors.title.message}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              rows={3}
-              placeholder="Add details about your event"
-              {...register("description")}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Category *</Label>
-            <Controller
-              name="category_ids"
-              control={control}
-              render={({ field }) => (
-                <Select
-                  value={field.value[0]?.toString() || ""}
-                  onValueChange={(val) => field.onChange([parseInt(val, 10)])}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id.toString()}>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="inline-block size-2.5 rounded-full"
-                            style={{ background: cat.color || "var(--sidebar-ring)" }}
-                          />
-                          {cat.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {errors.category_ids && (
-              <p className="text-destructive text-xs">{errors.category_ids.message}</p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is_all_day"
-              {...register("is_all_day")}
-              className="size-4 rounded border-input"
-            />
-            <Label htmlFor="is_all_day" className="cursor-pointer">
-              All day
-            </Label>
-          </div>
-
-          {!isAllDay && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Start Date *</Label>
-                  <Controller
-                    name="start_date"
-                    control={control}
-                    render={({ field }) => (
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 size-4" />
-                            {field.value ? format(field.value, "PPP") : "Pick a date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={(date) => date && field.onChange(date)}
-                            autoFocus={true}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Start Time *</Label>
-                  <Controller
-                    name="start_time"
-                    control={control}
-                    render={({ field }) => (
-                      <SimpleTimePicker
-                        value={field.value || new Date()}
-                        onChange={field.onChange}
-                        use12HourFormat
-                      />
-                    )}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>End Date *</Label>
-                  <Controller
-                    name="end_date"
-                    control={control}
-                    render={({ field }) => (
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 size-4" />
-                            {field.value ? format(field.value, "PPP") : "Pick a date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={(date) => date && field.onChange(date)}
-                            autoFocus={true}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>End Time *</Label>
-                  <Controller
-                    name="end_time"
-                    control={control}
-                    render={({ field }) => (
-                      <SimpleTimePicker
-                        value={field.value || new Date()}
-                        onChange={field.onChange}
-                        use12HourFormat
-                      />
-                    )}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          {isAllDay && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Start Date *</Label>
-                <Controller
-                  name="start_date"
-                  control={control}
-                  render={({ field }) => (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 size-4" />
-                          {field.value ? format(field.value, "PPP") : "Pick a date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => date && field.onChange(date)}
-                          autoFocus={true}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>End Date *</Label>
-                <Controller
-                  name="end_date"
-                  control={control}
-                  render={({ field }) => (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 size-4" />
-                          {field.value ? format(field.value, "PPP") : "Pick a date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => date && field.onChange(date)}
-                          autoFocus={true}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                />
-              </div>
-            </div>
-          )}
+          <EventBasicsFields
+            control={control}
+            register={register}
+            errors={errors}
+            categories={categories}
+            isAllDay={isAllDay}
+            disabled={isSubmitting}
+          />
 
           {/* Reminders Section (summary + manage) */}
           <div className="mt-2 border rounded-md">
@@ -789,7 +555,6 @@ export function EditEventDialog({
                 size="sm"
                 onClick={() => setManageOpen((v) => !v)}
               >
-                {manageOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
                 {manageOpen ? "Hide" : "Manage Reminders"}
               </Button>
             </div>
@@ -806,6 +571,7 @@ export function EditEventDialog({
                     variant="outline"
                     onClick={addDefaultReminder}
                     disabled={reminders.length >= MAX_REMINDERS_PER_EVENT}
+                    data-testid="reminder-add"
                   >
                     + Add
                   </Button>
@@ -837,7 +603,7 @@ export function EditEventDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChangeAction(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting} data-testid="event-save">
               {isSubmitting ? "Saving..." : "Save changes"}
             </Button>
           </DialogFooter>

@@ -1,18 +1,11 @@
 import { z } from "zod"
 
-export type ApiErrorShape = {
-  response?: { data?: { message?: string } }
-  message?: string
-}
-
-export function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === "object" && err !== null) {
-    const e = err as ApiErrorShape
-    return e.response?.data?.message ?? e.message ?? fallback
-  }
-  return fallback
-}
-
+/**
+ * Event module types and schema.
+ * Notes:
+ * - For all-day events, the UI enforces an inclusive end (end of day 23:59:59.999).
+ * - For timed events, end must be strictly after start.
+ */
 export interface EventData {
   id: string | number
   title: string
