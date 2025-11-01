@@ -1,18 +1,10 @@
 import { z } from "zod"
 
-export type ApiErrorShape = {
-  response?: { data?: { message?: string } }
-  message?: string
-}
-
-export function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === "object" && err !== null) {
-    const e = err as ApiErrorShape
-    return e.response?.data?.message ?? e.message ?? fallback
-  }
-  return fallback
-}
-
+/**
+ * Category utilities and schema.
+ * - COLOR_OPTIONS: curated mid-tone palette used by ColorPicker and dialogs
+ * - categorySchema: validates name and hex color; optional description
+ */
 export interface UpcomingEvent {
   id: string
   title: string
@@ -21,7 +13,7 @@ export interface UpcomingEvent {
   allDay: boolean
 }
 
-// Updated palette: 10 distinguishable mid-tone shades
+// 10 distinguishable mid-tone shades
 export const COLOR_OPTIONS = [
   { key: "indigo", label: "Indigo", value: "#4F46E5" },
   { key: "blue", label: "Blue", value: "#2563EB" },
@@ -39,7 +31,7 @@ const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/
 
 export const categorySchema = z.object({
   name: z.string().min(1, "Name is required"),
-  color: z.string().regex(hexColorRegex, "Color must be a hex value"),
+  color: z.string().regex(hexColorRegex, "Color must be a valid hex value"),
   description: z.string().optional(),
 })
 

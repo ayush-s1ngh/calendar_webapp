@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import {JSX} from "react";
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
@@ -17,11 +18,15 @@ import {
 import { categoryStore, type Category } from "@/store/category"
 import { toast } from "sonner"
 import { Pencil, Trash2, CalendarDays } from "lucide-react"
-import api from "@/lib/api"
 import { format } from "date-fns"
-import { utcIsoToLocalDate } from "@/lib/time"
-import { UpcomingEvent, getErrorMessage } from "./category-utils"
+import { fetchEvents } from "@/components/calendar/useCalendarEvents"
+import { getErrorMessage } from "@/lib/errors"
+import type { UpcomingEvent } from "./category-utils"
 
+/**
+ * View Category dialog with lightweight “upcoming events” preview.
+ * - Reuses fetchEvents (calendar) for consistent mapping
+ */
 export function ViewCategoryDialog({
   open,
   onOpenChange,
@@ -34,7 +39,7 @@ export function ViewCategoryDialog({
   category: Category | null
   onEditClick?: () => void
   onDeleted?: () => void
-}) {
+}): JSX.Element {
   const deleteCategory = categoryStore((s) => s.deleteCategory)
   const canDeleteCategory = categoryStore((s) => s.canDeleteCategory)
   const [loading, setLoading] = React.useState(false)
@@ -47,51 +52,20 @@ export function ViewCategoryDialog({
       try {
         const now = new Date()
         const future = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 365) // +1 year
-        const params: Record<string, string | number | boolean> = {
-          category_id: catId,
-          start_date: now.toISOString(),
-          end_date: future.toISOString(),
-          include_recurring: true,
-          per_page: 10,
-        }
-        const res = await api.get("/events", { params })
-        const root = res?.data as unknown
-        let list: unknown
-        if (typeof root === "object" && root && "data" in (root as Record<string, unknown>)) {
-          list = (root as Record<string, unknown>).data
-        } else {
-          list = root
-        }
-        let evs: unknown
-        if (typeof list === "object" && list && "events" in (list as Record<string, unknown>)) {
-          evs = (list as Record<string, unknown>).events
-        } else {
-          evs = list
-        }
-        const arr = Array.isArray(evs) ? (evs as Array<Record<string, unknown>>) : []
-        const mapped = arr
-          .map((e) => {
-            const id = String(e.id ?? "")
-            const title = String(e.title ?? "")
-            const startIso = String(e.start_datetime ?? "")
-            const endIso = e.end_datetime ? String(e.end_datetime) : undefined
-            const isAllDay = Boolean(e.is_all_day)
-            if (!id || !title || !startIso) return null
-            return {
-              id,
-              title,
-              start: utcIsoToLocalDate(startIso),
-              end: endIso ? utcIsoToLocalDate(endIso) : undefined,
-              allDay: isAllDay,
-            } as UpcomingEvent
-          })
-          .filter(Boolean) as UpcomingEvent[]
-        // Sort ascending by start
+        const fcEvents = await fetchEvents(
+          { start: now, end: future },
+          { includeRecurring: true, categoryIds: [catId] }
+        )
+        const mapped: UpcomingEvent[] = fcEvents.map((e) => ({
+          id: String(e.id),
+          title: e.title || "",
+          start: e.start as Date,
+          end: (e.end as Date) || undefined,
+          allDay: Boolean(e.allDay),
+        }))
         mapped.sort((a, b) => a.start.getTime() - b.start.getTime())
-        if (!cancelled) {
-          setEvents(mapped.slice(0, 3))
-        }
-      } catch {
+        if (!cancelled) setEvents(mapped.slice(0, 3))
+      } catch (err) {
         if (!cancelled) setEvents([])
       } finally {
         if (!cancelled) setLoading(false)
@@ -115,7 +89,7 @@ export function ViewCategoryDialog({
       toast.success("Category deleted")
       onOpenChange(false)
       onDeleted?.()
-    } catch (err: unknown) {
+    } catch (err) {
       toast.error(getErrorMessage(err, "Failed to delete category"))
     }
   }
@@ -171,13 +145,13 @@ export function ViewCategoryDialog({
         <DialogFooter className="justify-between">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onEditClick}>
+            <Button variant="outline" onClick={onEditClick} aria-label="Edit category">
               <Pencil className="size-4" />
               Edit
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" disabled={!canDelete}>
+                <Button variant="destructive" disabled={!canDelete} aria-label="Delete category">
                   <Trash2 className="size-4" />
                   Delete
                 </Button>

@@ -20,15 +20,19 @@ import { Pencil, Trash2, Plus } from "lucide-react"
 import { CreateCategoryDialog } from "./CreateCategoryDialog"
 import { ViewCategoryDialog } from "./ViewCategoryDialog"
 import { EditCategoryDialog } from "./EditCategoryDialog"
-import { getErrorMessage } from "./category-utils"
+import { getErrorMessage } from "@/lib/errors"
+import {JSX} from "react";
 
+/**
+ * Manage Categories modal: lists, creates, edits, deletes categories.
+ */
 export function CategoryManagerDialog({
   open,
   onOpenChange,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-}) {
+}): JSX.Element {
   const categories = categoryStore((s) => s.categories)
   const loadCategories = categoryStore((s) => s.loadCategories)
   const getCategoryById = categoryStore((s) => s.getCategoryById)
@@ -43,8 +47,7 @@ export function CategoryManagerDialog({
 
   React.useEffect(() => {
     if (open) void loadCategories()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, loadCategories])
 
   const handleDelete = async (id: number) => {
     try {
@@ -52,7 +55,7 @@ export function CategoryManagerDialog({
       toast.success("Category deleted")
       if (activeId === id) setActiveId(null)
       await loadCategories()
-    } catch (err: unknown) {
+    } catch (err) {
       toast.error(getErrorMessage(err, "Failed to delete category"))
     }
   }
@@ -65,7 +68,7 @@ export function CategoryManagerDialog({
             <DialogTitle>Manage Categories</DialogTitle>
           </DialogHeader>
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="category-new">
               <Plus className="size-4" />
               New Category
             </Button>
@@ -81,28 +84,25 @@ export function CategoryManagerDialog({
                   key={cat.id}
                   className="flex items-center gap-3 rounded-md border bg-card/60 px-3 py-2"
                 >
-                  <span className="inline-block size-3 rounded-full border" style={{ background: cat.color || "var(--sidebar-ring)" }} />
-                  <div
-                    role="button"
-                    tabIndex={0}
+                  <span
+                    className="inline-block size-3 rounded-full border"
+                    style={{ background: cat.color || "var(--sidebar-ring)" }}
+                  />
+                  <button
+                    type="button"
                     onClick={() => {
                       setActiveId(cat.id)
                       setViewOpen(true)
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        setActiveId(cat.id)
-                        setViewOpen(true)
-                      }
-                    }}
-                    className="min-w-0 flex-1 cursor-pointer"
+                    className="min-w-0 flex-1 text-left"
                     title="View details"
+                    aria-label={`View ${cat.name}`}
                   >
                     <div className="truncate text-sm font-medium hover:underline">{cat.name}</div>
                     {cat.description && (
                       <div className="truncate text-xs text-muted-foreground">{cat.description}</div>
                     )}
-                  </div>
+                  </button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -110,13 +110,20 @@ export function CategoryManagerDialog({
                       setActiveId(cat.id)
                       setEditOpen(true)
                     }}
+                    aria-label={`Edit ${cat.name}`}
                     title="Edit"
                   >
                     <Pencil className="size-4" />
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm" title="Delete" disabled={!canDelete}>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        aria-label={`Delete ${cat.name}`}
+                        title="Delete"
+                        disabled={!canDelete}
+                      >
                         <Trash2 className="size-4" />
                       </Button>
                     </AlertDialogTrigger>
@@ -150,7 +157,7 @@ export function CategoryManagerDialog({
 
       <CreateCategoryDialog
         open={createOpen}
-        onOpenChange={(v) => setCreateOpen(v)}
+        onOpenChange={setCreateOpen}
         onCreated={async () => {
           await loadCategories()
         }}

@@ -1,22 +1,18 @@
 "use client"
 
 import * as React from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { categoryStore, type Category } from "@/store/category"
+import { JSX } from "react"
 import { toast } from "sonner"
-import { ColorPicker } from "./ColorPicker"
-import {
-  categorySchema,
-  CategoryFormValues,
-  COLOR_OPTIONS,
-  getErrorMessage,
-} from "./category-utils"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { categoryStore, type Category } from "@/store/category"
+import { CategoryForm } from "./CategoryForm"
+import { getErrorMessage } from "@/lib/errors"
 
+/**
+ * Create Category dialog.
+ * - Uses reusable CategoryForm
+ * - Emits onCreated on success
+ */
 export function CreateCategoryDialog({
   open,
   onOpenChange,
@@ -25,58 +21,37 @@ export function CreateCategoryDialog({
   open: boolean
   onOpenChange: (v: boolean) => void
   onCreated?: (cat: Category) => void
-}) {
+}): JSX.Element {
   const createCategory = categoryStore((s) => s.createCategory)
-  const { register, handleSubmit, formState: { errors, isSubmitting }, setValue, watch, reset } =
-    useForm<CategoryFormValues>({
-      resolver: zodResolver(categorySchema),
-      defaultValues: {
-        name: "",
-        color: COLOR_OPTIONS[0].value,
-        description: "",
-      },
-    })
+  const [submitting, setSubmitting] = React.useState(false)
 
-  const color = watch("color")
-
-  const onSubmit = async (values: CategoryFormValues) => {
+  const submit = async (values: Parameters<typeof createCategory>[0]) => {
+    setSubmitting(true)
     try {
       const cat = await createCategory(values)
       toast.success("Category created")
       onCreated?.(cat)
       onOpenChange(false)
-      reset()
-    } catch (err: unknown) {
+    } catch (err) {
       toast.error(getErrorMessage(err, "Failed to create category"))
+    } finally {
+      setSubmitting(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!isSubmitting) onOpenChange(v) }}>
+    <Dialog open={open} onOpenChange={(v) => !submitting && onOpenChange(v)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create Category</DialogTitle>
         </DialogHeader>
-        <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Name</label>
-            <Input {...register("name")} aria-invalid={!!errors.name} placeholder="e.g. Work" />
-            {errors.name && <p className="text-destructive text-xs">{errors.name.message}</p>}
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Color</label>
-            <ColorPicker value={color} onChange={(v) => setValue("color", v, { shouldValidate: true })} />
-            {errors.color && <p className="text-destructive text-xs">{errors.color.message}</p>}
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Description (optional)</label>
-            <Textarea rows={3} placeholder="Describe this category" {...register("description")} />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Creating..." : "Create"}</Button>
-          </DialogFooter>
-        </form>
+        <CategoryForm
+          onSubmit={submit}
+          submitting={submitting}
+          submitLabel="Create"
+          onCancel={() => onOpenChange(false)}
+          autoFocusName
+        />
       </DialogContent>
     </Dialog>
   )
