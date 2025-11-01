@@ -1,3 +1,8 @@
+/**
+ * Fetch and map events from the API to FullCalendar inputs.
+ * - Handles inclusive (backend) vs exclusive (FullCalendar) end for all-day events
+ * - Tolerant to envelope shapes: data, events, or raw arrays
+ */
 import { DateRangeInput } from "./types-internal"
 import type { EventInput } from "@fullcalendar/core"
 import api from "@/lib/api"
@@ -33,18 +38,13 @@ function mapApiEventToEventInput(ev: ApiEvent): EventInput {
   const startLocal = utcIsoToLocalDate(ev.start_datetime)
   let endLocal = ev.end_datetime ? utcIsoToLocalDate(ev.end_datetime) : undefined
   const primaryCategory = ev.categories?.[0]
-
-  // IMPORTANT: Prioritize category color over event color
   const color = primaryCategory?.color || ev.color || undefined
   const allDay = Boolean(ev.is_all_day)
 
-  // FIX: Convert backend's INCLUSIVE end to FullCalendar's EXCLUSIVE end for all-day events
+  // Convert backend's inclusive end → FullCalendar exclusive end (all-day only)
   if (allDay && endLocal) {
-    // Backend stores: Oct 2 23:59:59.999 (inclusive end of Oct 2)
-    // FullCalendar needs: Oct 3 00:00:00 (exclusive - start of next day)
-    const inclusiveDayEnd = startOfDay(endLocal) // Oct 2 00:00:00
-    const exclusiveEnd = addDays(inclusiveDayEnd, 1) // Oct 3 00:00:00
-    endLocal = exclusiveEnd
+    const inclusiveDayStart = startOfDay(endLocal) // e.g., Oct 2 00:00
+    endLocal = addDays(inclusiveDayStart, 1) // → Oct 3 00:00
   }
 
   return {
@@ -110,7 +110,7 @@ export async function fetchEvents(
     return extractEventsFromResponse(res.data)
   }
 
-  let apiEvents: ApiEvent[] = []
+    let apiEvents: ApiEvent[];
 
   if (selected.length === 0) {
     apiEvents = await fetchOne()

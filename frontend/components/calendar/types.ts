@@ -1,3 +1,4 @@
+// Calendar external/shared types used in UI and data mapping.
 export interface CalendarCategory {
   id: string
   name: string

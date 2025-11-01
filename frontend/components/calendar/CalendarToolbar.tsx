@@ -1,6 +1,11 @@
 "use client"
 
-import { useCallback } from "react"
+/**
+ * Lightweight toolbar for FullCalendar views.
+ * - Avoids unnecessary re-renders via React memo
+ * - Provides accessible controls for navigation and view switching
+ */
+import {JSX, memo, useCallback} from "react"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
@@ -21,9 +26,9 @@ const VIEWS = [
   { id: "timeGridWeek", label: "Week" },
   { id: "timeGridDay", label: "Day" },
   { id: "listWeek", label: "List" },
-]
+] as const
 
-export function CalendarToolbar({
+export const CalendarToolbar = memo(function CalendarToolbar({
   title,
   currentView,
   onChangeView,
@@ -31,7 +36,7 @@ export function CalendarToolbar({
   onNext,
   onToday,
   onAddEvent,
-}: CalendarToolbarProps) {
+}: CalendarToolbarProps): JSX.Element {
   const handleView = useCallback(
     (id: string) => {
       if (id !== currentView) onChangeView(id)
@@ -82,7 +87,7 @@ export function CalendarToolbar({
         </h2>
 
         <div className="ml-auto flex items-center rounded-full bg-muted/60 p-1 gap-1 border border-border/60">
-          {VIEWS.map(v => (
+          {VIEWS.map((v) => (
             <Toggle
               key={v.id}
               pressed={currentView === v.id}
@@ -100,4 +105,4 @@ export function CalendarToolbar({
       </div>
     </div>
   )
-}
+})

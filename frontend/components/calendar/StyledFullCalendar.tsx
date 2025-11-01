@@ -1,5 +1,9 @@
 "use client"
 
+/**
+ * FullCalendar wrapper with unified plugins and custom event rendering.
+ * Keeps config localized so CalendarWrapper stays focused on data/UX.
+ */
 import FullCalendar from "@fullcalendar/react"
 import type { EventDropArg, DatesSetArg, EventContentArg, EventInput, EventClickArg, DateSelectArg } from "@fullcalendar/core"
 import type { EventResizeDoneArg } from "@fullcalendar/interaction"
@@ -7,13 +11,13 @@ import dayGridPlugin from "@fullcalendar/daygrid"
 import timeGridPlugin from "@fullcalendar/timegrid"
 import listPlugin from "@fullcalendar/list"
 import interactionPlugin from "@fullcalendar/interaction"
-import { useCallback } from "react"
+import {JSX, useCallback} from "react"
 import "./FullCalendarStyles.css"
 
 export interface StyledFullCalendarProps {
   events: EventInput[]
   onDatesSet?: (arg: DatesSetArg) => void
-  calendarRef: React.MutableRefObject<FullCalendar | null>
+  calendarRef: React.RefObject<FullCalendar | null>
   onEventDrop?: (arg: EventDropArg) => void
   onEventResize?: (arg: EventResizeDoneArg) => void
   onEventClick?: (arg: EventClickArg) => void
@@ -37,7 +41,7 @@ export function StyledFullCalendar({
   onEventResize,
   onEventClick,
   onDateSelect,
-}: StyledFullCalendarProps) {
+}: StyledFullCalendarProps): JSX.Element {
   const renderEventContent = useCallback((arg: EventContentArg) => {
     const meta = arg.event.extendedProps as Partial<CalendarEventExt>
     const categoryColor = meta?.categoryColorVar
