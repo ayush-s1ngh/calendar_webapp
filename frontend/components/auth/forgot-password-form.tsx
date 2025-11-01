@@ -7,32 +7,37 @@ import Link from "next/link"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
-import api from "@/lib/api"
 import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/errors"
+import { requestPasswordReset } from "@/lib/authApi"
 
+/**
+ * Forgot password form.
+ * - Requests a password reset email for the provided address
+ */
 const schema = z.object({
   email: z.string().email("Invalid email"),
 })
 
 type FormValues = z.infer<typeof schema>
 
-type ErrorLike = { response?: { data?: { message?: string } } }
-function getMessage(err: unknown, fallback: string) {
-  return (err as ErrorLike)?.response?.data?.message ?? fallback
-}
-
-export default function ForgotPasswordForm() {
-  const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<FormValues>({
+export function ForgotPasswordForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    reset,
+  } = useForm<FormValues>({
     resolver: zodResolver(schema),
   })
 
   const onSubmit = async (values: FormValues) => {
     try {
-      await api.post("/auth/request-password-reset", { email: values.email })
+      await requestPasswordReset(values.email)
       toast.success("If an account exists, a reset link has been sent.")
       reset()
     } catch (err: unknown) {
-      toast.error(getMessage(err, "Failed to request password reset"))
+      toast.error(getErrorMessage(err, "Failed to request password reset"))
     }
   }
 
@@ -44,18 +49,29 @@ export default function ForgotPasswordForm() {
             Forgot your password?
           </h1>
           <p className="mt-2 text-center text-sm">
-            Enter the email address associated with your account and We&apos;ll send you a link to reset your password.
+            Enter the email address associated with your account and we&apos;ll send you a link to
+            reset your password.
           </p>
         </div>
-        <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        <form className="space-y-6" onSubmit={handleSubmit(onSubmit)} aria-label="Forgot password form">
           <div>
             <Label htmlFor="email" className="sr-only">
               Email address
             </Label>
-            <Input id="email" type="email" autoComplete="email" required placeholder="Email address" aria-invalid={!!errors.email} {...register("email")} />
-            {errors.email && <span className="text-destructive text-xs">{errors.email.message}</span>}
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              required
+              placeholder="Email address"
+              aria-invalid={!!errors.email}
+              {...register("email")}
+            />
+            {errors.email && (
+              <span className="text-destructive text-xs">{errors.email.message}</span>
+            )}
           </div>
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
+          <Button type="submit" className="w-full" disabled={isSubmitting} data-testid="auth-submit">
             {isSubmitting ? "Sending..." : "Reset password"}
           </Button>
         </form>
@@ -72,3 +88,5 @@ export default function ForgotPasswordForm() {
     </div>
   )
 }
+
+export default ForgotPasswordForm

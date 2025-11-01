@@ -6,46 +6,55 @@ import { Button } from "@/components/ui/button"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
-import api from "@/lib/api"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { MIN_PASSWORD_LEN } from "@/lib/constants"
+import { getErrorMessage } from "@/lib/errors"
+import { resetPassword as apiResetPassword } from "@/lib/authApi"
 
-const schema = z.object({
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  confirm: z.string().min(8, "Confirm your password"),
-}).refine((v) => v.password === v.confirm, {
-  message: "Passwords do not match",
-  path: ["confirm"],
-})
+/**
+ * Reset password form.
+ * - Accepts a token and new password
+ * - On success, redirects to /login
+ */
+const schema = z
+  .object({
+    password: z
+      .string()
+      .min(MIN_PASSWORD_LEN, `Password must be at least ${MIN_PASSWORD_LEN} characters`),
+    confirm: z.string().min(MIN_PASSWORD_LEN, "Confirm your password"),
+  })
+  .refine((v) => v.password === v.confirm, {
+    message: "Passwords do not match",
+    path: ["confirm"],
+  })
 
 type FormValues = z.infer<typeof schema>
 
-type ErrorLike = { response?: { data?: { message?: string } } }
-function getMessage(err: unknown, fallback: string) {
-  return (err as ErrorLike)?.response?.data?.message ?? fallback
-}
-
-export default function ResetPasswordForm({ token }: { token: string }) {
-  const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<FormValues>({
+export function ResetPasswordForm({ token }: { token: string }) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    reset,
+  } = useForm<FormValues>({
     resolver: zodResolver(schema),
   })
   const router = useRouter()
 
   const onSubmit = async (values: FormValues) => {
     try {
-      await api.post(`/auth/reset-password/${encodeURIComponent(token)}`, {
-        password: values.password,
-      })
+      await apiResetPassword(token, values.password)
       toast.success("Password reset successfully")
       router.replace("/login")
     } catch (err: unknown) {
-      toast.error(getMessage(err, "Failed to reset password"))
+      toast.error(getErrorMessage(err, "Failed to reset password"))
       reset({ password: "", confirm: "" })
     }
   }
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-8">
+    <div className="mx-auto w/full max-w-md space-y-8">
       <div>
         <h1 className="text-2xl text-center font-semibold tracking-tight">
           Reset your password
@@ -54,7 +63,7 @@ export default function ResetPasswordForm({ token }: { token: string }) {
           Enter the new password you would like to use for your account.
         </p>
       </div>
-      <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+      <form className="space-y-6" onSubmit={handleSubmit(onSubmit)} aria-label="Reset password form">
         <div>
           <Label htmlFor="new-password" className="sr-only">
             New password
@@ -62,11 +71,14 @@ export default function ResetPasswordForm({ token }: { token: string }) {
           <Input
             id="new-password"
             type="password"
+            autoComplete="new-password"
             placeholder="New password"
             aria-invalid={!!errors.password}
             {...register("password")}
           />
-          {errors.password && <span className="text-destructive text-xs">{errors.password.message}</span>}
+          {errors.password && (
+            <span className="text-destructive text-xs">{errors.password.message}</span>
+          )}
         </div>
         <div>
           <Label htmlFor="confirm-password" className="sr-only">
@@ -75,16 +87,21 @@ export default function ResetPasswordForm({ token }: { token: string }) {
           <Input
             id="confirm-password"
             type="password"
+            autoComplete="new-password"
             placeholder="Confirm new password"
             aria-invalid={!!errors.confirm}
             {...register("confirm")}
           />
-          {errors.confirm && <span className="text-destructive text-xs">{errors.confirm.message}</span>}
+          {errors.confirm && (
+            <span className="text-destructive text-xs">{errors.confirm.message}</span>
+          )}
         </div>
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
+        <Button type="submit" className="w-full" disabled={isSubmitting} data-testid="auth-submit">
           {isSubmitting ? "Submitting..." : "Submit"}
         </Button>
       </form>
     </div>
   )
 }
+
+export default ResetPasswordForm
