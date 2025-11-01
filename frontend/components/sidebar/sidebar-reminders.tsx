@@ -1,6 +1,13 @@
 "use client"
 
+/**
+ * Upcoming reminders preview (next 30 days).
+ * - Fetches events (45-day window) then loads reminders per event in parallel
+ * - Sorts by next trigger time and shows top 5 groups
+ * - Listens to `reminders:refresh` to refresh on changes
+ */
 import * as React from "react"
+import { JSX } from "react"
 import { addDays, format, isSameDay } from "date-fns"
 import { Calendar as CalendarIcon, ChevronDown, ChevronUp, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -21,6 +28,10 @@ import {
 } from "@/components/reminders"
 import { ViewEventDialog } from "@/components/events/ViewEventDialog"
 import { EditEventDialog } from "@/components/events/EditEventDialog"
+
+const UPCOMING_WINDOW_DAYS = 30
+const EVENTS_FETCH_PAD_DAYS = 45
+const EVENTS_PER_PAGE = 100
 
 type EventWithReminders = {
   event: EventData
@@ -53,7 +64,7 @@ function getMessage(err: unknown, fallback: string) {
   return (err as ErrorLike)?.response?.data?.message ?? fallback
 }
 
-export function SidebarReminders() {
+export function SidebarReminders(): JSX.Element {
   const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -67,8 +78,8 @@ export function SidebarReminders() {
 
   const nowRef = React.useRef(new Date())
   const rangeNow = nowRef.current
-  const rangeEnd = React.useMemo(() => addDays(rangeNow, 30), [rangeNow])
-  const eventsFetchEnd = React.useMemo(() => addDays(rangeNow, 45), [rangeNow])
+  const rangeEnd = React.useMemo(() => addDays(rangeNow, UPCOMING_WINDOW_DAYS), [rangeNow])
+  const eventsFetchEnd = React.useMemo(() => addDays(rangeNow, EVENTS_FETCH_PAD_DAYS), [rangeNow])
 
   const withinWindowOrPastToday = React.useCallback(
     (dt: Date) => {
@@ -91,29 +102,36 @@ export function SidebarReminders() {
           start_date: rangeNow.toISOString(),
           end_date: eventsFetchEnd.toISOString(),
           include_recurring: true,
-          per_page: 100,
+          per_page: EVENTS_PER_PAGE,
         },
       })
       const events = extractEventsUnknown(res?.data)
 
-      const results: EventWithReminders[] = []
-      for (const ev of events) {
-        const reminders = await fetchRemindersForEvent(ev.id)
-        if (!reminders.length) continue
+      const settled = await Promise.allSettled(
+        events.map(async (ev) => {
+          const reminders = await fetchRemindersForEvent(ev.id)
+          if (!reminders.length) return null
 
-        const withTriggers = reminders
-          .map((r) => ({ r, trigger: getReminderLocalTriggerDate(r, ev.start_datetime) }))
-          .filter(({ trigger }) => withinWindowOrPastToday(trigger))
-          .sort((a, b) => a.trigger.getTime() - b.trigger.getTime())
+          const withTriggers = reminders
+            .map((r) => ({ r, trigger: getReminderLocalTriggerDate(r, ev.start_datetime) }))
+            .filter(({ trigger }) => withinWindowOrPastToday(trigger))
+            .sort((a, b) => a.trigger.getTime() - b.trigger.getTime())
 
-        if (withTriggers.length === 0) continue
+          if (withTriggers.length === 0) return null
 
-        const nextTrigger = withTriggers[0].trigger
-        results.push({
-          event: ev,
-          reminders: withTriggers.map((x) => x.r),
-          nextTrigger,
+          const nextTrigger = withTriggers[0].trigger
+          const group: EventWithReminders = {
+            event: ev,
+            reminders: withTriggers.map((x) => x.r),
+            nextTrigger,
+          }
+          return group
         })
+      )
+
+      const results: EventWithReminders[] = []
+      for (const s of settled) {
+        if (s.status === "fulfilled" && s.value) results.push(s.value)
       }
 
       results.sort((a, b) => a.nextTrigger.getTime() - b.nextTrigger.getTime())
@@ -184,7 +202,7 @@ export function SidebarReminders() {
           </div>
 
           <CollapsibleContent>
-            <SidebarGroupContent className="mt-2 space-y-2">
+            <SidebarGroupContent className="mt-2 space-y-2" aria-busy={loading}>
               {loading && (
                 <div className="space-y-2">
                   {[0, 1, 2].map((i) => (
@@ -213,7 +231,7 @@ export function SidebarReminders() {
               {!loading && error && (
                 <div className="rounded-md border p-3 text-sm">
                   <div className="text-destructive mb-2">{error}</div>
-                  <Button variant="outline" size="sm" onClick={() => void load()}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
                     Retry
                   </Button>
                 </div>
@@ -244,6 +262,7 @@ export function SidebarReminders() {
                           style={{ background: color }}
                         />
                         <button
+                          type="button"
                           className="text-left w-full"
                           onClick={() => openView(g.event)}
                           aria-label={`Open event ${g.event.title}`}

@@ -1,6 +1,11 @@
 "use client"
 
+/**
+ * Application sidebar layout.
+ * Composes filters, reminders, and user actions. Uses the "icon" collapsible variant.
+ */
 import * as React from "react"
+import { JSX } from "react"
 
 import { SidebarUser } from "@/components/sidebar/sidebar-user"
 import {
@@ -14,7 +19,7 @@ import { SidebarFilters } from "@/components/sidebar/sidebar-filters"
 import { SidebarReminders } from "@/components/sidebar/sidebar-reminders"
 import { authStore } from "@/store/auth"
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>): JSX.Element {
   const user = authStore((s) => s.user)
 
   return (
@@ -29,7 +34,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           user={{
             name: user?.username || "User",
             email: user?.email || "",
-            avatar: "", // backend doesn't provide avatar yet
+            avatar: "",
           }}
         />
       </SidebarFooter>

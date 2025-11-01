@@ -1,6 +1,13 @@
 "use client"
 
+/**
+ * User menu in the sidebar footer.
+ * - Shows avatar, name, and email
+ * - Actions: Profile, Notifications (placeholder), Logout
+ * - Adapts dropdown side for mobile vs desktop
+ */
 import * as React from "react"
+import { JSX } from "react"
 import { BadgeCheck, Bell, ChevronsUpDown, LogOut } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -24,14 +31,10 @@ import {
 import { authStore } from "@/store/auth"
 
 function getInitials(name: string) {
-  try {
-    const parts = name.trim().split(/\s+/).filter(Boolean)
-    if (parts.length === 0) return "U"
-    if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-    return (parts[0]!.slice(0, 1) + parts[1]!.slice(0, 1)).toUpperCase()
-  } catch {
-    return "U"
-  }
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return "U"
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return (parts[0]!.slice(0, 1) + parts[1]!.slice(0, 1)).toUpperCase()
 }
 
 export function SidebarUser({
@@ -42,7 +45,7 @@ export function SidebarUser({
     email: string
     avatar: string
   }
-}) {
+}): JSX.Element {
   const { isMobile } = useSidebar()
   const router = useRouter()
   const logout = authStore((s) => s.logout)
@@ -86,7 +89,7 @@ export function SidebarUser({
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-56 rounded-lg"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
@@ -107,21 +110,11 @@ export function SidebarUser({
             </DropdownMenuLabel>
 
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault()
-                  handleProfile()
-                }}
-              >
+              <DropdownMenuItem onSelect={handleProfile}>
                 <BadgeCheck />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault()
-                  handleNotifications()
-                }}
-              >
+              <DropdownMenuItem onSelect={handleNotifications}>
                 <Bell />
                 Notifications
               </DropdownMenuItem>
@@ -129,12 +122,7 @@ export function SidebarUser({
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault()
-                handleLogout()
-              }}
-            >
+            <DropdownMenuItem onSelect={handleLogout}>
               <LogOut />
               Log out
             </DropdownMenuItem>

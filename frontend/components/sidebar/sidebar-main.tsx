@@ -1,21 +1,19 @@
 "use client"
 
-import { ChevronRight, type LucideIcon } from "lucide-react"
+/**
+ * Simple navigational menu section for the sidebar.
+ * Renders a list of links with optional icons and active state.
+ */
+import { JSX } from "react"
+import Link from "next/link"
+import type { LucideIcon } from "lucide-react"
 
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 
 export function SidebarMain({
@@ -31,18 +29,20 @@ export function SidebarMain({
       url: string
     }[]
   }[]
-}) {
+}): JSX.Element {
   return (
-    <SidebarGroup>
+    <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel>Menu</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton tooltip={item.title}>
-                  {item.icon && <item.icon />}
-                  <span>{item.title}</span>
-                </SidebarMenuButton>
-            </SidebarMenuItem>
+          <SidebarMenuItem key={`${item.title}-${item.url}`}>
+            <SidebarMenuButton asChild tooltip={item.title} aria-current={item.isActive ? "page" : undefined}>
+              <Link href={item.url}>
+                {item.icon && <item.icon />}
+                <span>{item.title}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         ))}
       </SidebarMenu>
     </SidebarGroup>

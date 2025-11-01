@@ -1,28 +1,19 @@
 "use client"
 
-import {
-  Folder,
-  Forward,
-  MoreHorizontal,
-  Trash2,
-  type LucideIcon,
-} from "lucide-react"
+/**
+ * Quick links/tools section.
+ * Renders navigational links with icons.
+ */
+import { JSX } from "react"
+import Link from "next/link"
+import type { LucideIcon } from "lucide-react"
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
 } from "@/components/ui/sidebar"
 
 export function SidebarTools({
@@ -33,20 +24,18 @@ export function SidebarTools({
     url: string
     icon: LucideIcon
   }[]
-}) {
-  const { isMobile } = useSidebar()
-
+}): JSX.Element {
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel>Tools</SidebarGroupLabel>
       <SidebarMenu>
         {tools.map((item) => (
-          <SidebarMenuItem key={item.name}>
+          <SidebarMenuItem key={`${item.name}-${item.url}`}>
             <SidebarMenuButton asChild>
-              <a href={item.url}>
+              <Link href={item.url}>
                 <item.icon />
                 <span>{item.name}</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         ))}

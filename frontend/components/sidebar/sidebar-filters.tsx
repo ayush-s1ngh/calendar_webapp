@@ -1,6 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+/**
+ * Sidebar filters section.
+ * - Event search (writes to category store's searchTerm)
+ * - Category multi-select with clear-all
+ * - Quick access to create/manage categories
+ */
+import { JSX, useEffect, useMemo, useState } from "react"
 import { Tags, Plus, Loader2, XCircle, Settings2 } from "lucide-react"
 import { categoryStore } from "@/store/category"
 import {
@@ -20,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { CategoryManagerDialog, CreateCategoryDialog } from "@/components/categories"
 
-export function SidebarFilters() {
+export function SidebarFilters(): JSX.Element {
   const {
     categories,
     selectedCategoryIds,
@@ -56,9 +62,11 @@ export function SidebarFilters() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search events"
+              aria-label="Search events"
             />
             {searchTerm && (
               <Button
+                type="button"
                 variant="outline"
                 size="icon-sm"
                 onClick={() => setSearchTerm("")}
@@ -78,12 +86,12 @@ export function SidebarFilters() {
         <SidebarGroupContent>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="w-full justify-between">
+              <Button variant="outline" size="sm" className="w-full justify-between" aria-haspopup="menu">
                 <span className="flex items-center gap-2">
                   <Tags className="size-4" />
                   Manage Categories
                 </span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground" aria-live="polite">
                   {isLoading ? "Loading..." : hasSelection ? `${selectedCount} selected` : "All"}
                 </span>
               </Button>
@@ -91,8 +99,7 @@ export function SidebarFilters() {
             <DropdownMenuContent className="w-64">
               {/* Clear all filters action */}
               <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault()
+                onSelect={() => {
                   if (hasSelection) clearFilters()
                 }}
                 disabled={!hasSelection}
@@ -130,21 +137,11 @@ export function SidebarFilters() {
                 ))}
 
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault()
-                  setCreateOpen(true)
-                }}
-              >
+              <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
                 <Plus className="size-4" />
                 Add Category
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault()
-                  setManagerOpen(true)
-                }}
-              >
+              <DropdownMenuItem onSelect={() => setManagerOpen(true)}>
                 <Settings2 className="size-4" />
                 Manage all categories
               </DropdownMenuItem>
