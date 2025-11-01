@@ -8,11 +8,18 @@ import type { ApiReminder } from "./reminder-time"
 export async function fetchRemindersForEvent(eventId: string | number): Promise<ApiReminder[]> {
   try {
     const res = await api.get(`/reminders/event/${encodeURIComponent(String(eventId))}/reminders`)
-    const d = res?.data as any
+    const d: unknown = res?.data
     if (Array.isArray(d)) return d as ApiReminder[]
-    if (Array.isArray(d?.reminders)) return d.reminders as ApiReminder[]
-    if (Array.isArray(d?.data)) return d.data as ApiReminder[]
-    if (Array.isArray(d?.data?.reminders)) return d.data.reminders as ApiReminder[]
+    const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null
+    if (isObj(d)) {
+      const reminders = d["reminders"]
+      if (Array.isArray(reminders)) return reminders as ApiReminder[]
+      const data = d["data"]
+      if (isObj(data)) {
+        if (Array.isArray(data["reminders"])) return data["reminders"] as ApiReminder[]
+      }
+      if (Array.isArray(d["data"])) return d["data"] as ApiReminder[]
+    }
     return []
   } catch {
     return []

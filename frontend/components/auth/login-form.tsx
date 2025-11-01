@@ -51,7 +51,7 @@ export function LoginForm({
         throw new Error("No access token received")
       }
       setTokens(tokens)
-      setUser(user as any)
+      setUser(user ?? null)
       toast.success("Login successful")
       router.replace("/calendar")
     } catch (err: unknown) {
