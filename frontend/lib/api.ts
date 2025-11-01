@@ -1,4 +1,14 @@
-import axios, { AxiosHeaders, RawAxiosRequestHeaders } from "axios"
+/**
+ * Axios API client
+ * - Injects Authorization header from localStorage (browser only)
+ * - Uses a single instance with baseURL from NEXT_PUBLIC_API_BASE_URL
+ * - On 401 responses, logs out and hard-redirects to /login
+ *
+ * Notes:
+ * - Request interceptor uses AxiosHeaders.from(...) to normalize headers,
+ *   avoiding type juggling between AxiosHeaders and RawAxiosRequestHeaders.
+ */
+import axios, { AxiosHeaders } from "axios"
 import { authStore } from "@/store/auth"
 
 const api = axios.create({
@@ -10,18 +20,9 @@ api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("access_token")
     if (token) {
-      // Ensure headers exists
-      if (!config.headers) {
-        config.headers = new AxiosHeaders();
-        (config.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`)
-      }
-      const headers = config.headers
-      // Axios v1 may use AxiosHeaders with a .set method
-      if (headers && typeof (headers as AxiosHeaders).set === "function") {
-        ;(headers as AxiosHeaders).set("Authorization", `Bearer ${token}`)
-      } else {
-        ;(config.headers as RawAxiosRequestHeaders)["Authorization"] = `Bearer ${token}`
-      }
+      const headers = AxiosHeaders.from(config.headers ?? {})
+      headers.set("Authorization", `Bearer ${token}`)
+      config.headers = headers
     }
   }
   return config
