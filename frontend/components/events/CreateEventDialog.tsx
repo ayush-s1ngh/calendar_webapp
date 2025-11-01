@@ -19,7 +19,15 @@ import { localDateToUtcIso } from "@/lib/time"
 import { getErrorMessage } from "@/lib/errors"
 import { EventBasicsFields } from "./EventBasicsFields"
 import { eventSchema, type EventFormValues } from "./event-utils"
-import { ReminderFormRow, ReminderFormValue, MAX_REMINDERS_PER_EVENT, getReminderComparisonKey, validateRelativeReminder, buildReminderPayloadFromForm, type ReminderCreatePayload } from "@/components/reminders"
+import {
+  ReminderFormRow,
+  ReminderFormValue,
+  MAX_REMINDERS_PER_EVENT,
+  getReminderComparisonKey,
+  validateRelativeReminder,
+  buildReminderPayloadFromForm,
+  type ReminderCreatePayload,
+} from "@/components/reminders"
 
 export function CreateEventDialog({
   open,
@@ -68,7 +76,6 @@ export function CreateEventDialog({
     },
   })
 
-  // Reset dialog defaults when opened or initial props change
   React.useEffect(() => {
     if (!open) return
     const defStart = initialStart || initialDate || new Date()
@@ -95,10 +102,8 @@ export function CreateEventDialog({
   const startDate = watch("start_date")
   const startTime = watch("start_time")
 
-  // Reminders state (managed outside react-hook-form)
   const [reminders, setReminders] = React.useState<ReminderFormValue[]>([])
 
-  // Compute event's local start Date for reminder calculations
   const eventLocalStart = React.useMemo(() => {
     if (isAllDay) {
       const d = new Date(startDate || new Date())
@@ -112,7 +117,6 @@ export function CreateEventDialog({
     }
   }, [isAllDay, startDate, startTime])
 
-  // Auto-convert reminders when event type toggles (timed <-> all-day)
   const prevIsAllDayRef = React.useRef<boolean>(initialAllDay)
   React.useEffect(() => {
     if (prevIsAllDayRef.current !== isAllDay) {
@@ -152,8 +156,13 @@ export function CreateEventDialog({
           { mode: "preset", preset: "hr_1", notificationType: "email" },
         ]
     const pick = candidates.find(
-      (c) => !getReminderComparisonKey(c, !isAllDay, eventLocalStart) ||
-        !reminders.some((r) => getReminderComparisonKey(r, !isAllDay, eventLocalStart) === getReminderComparisonKey(c, !isAllDay, eventLocalStart))
+      (c) =>
+        !getReminderComparisonKey(c, !isAllDay, eventLocalStart) ||
+        !reminders.some(
+          (r) =>
+            getReminderComparisonKey(r, !isAllDay, eventLocalStart) ===
+            getReminderComparisonKey(c, !isAllDay, eventLocalStart)
+        )
     )
     setReminders((prev) => [...prev, pick ?? candidates[0]])
   }
@@ -171,7 +180,6 @@ export function CreateEventDialog({
   }
 
   function validateRemindersOrToast(): boolean {
-    // Duplicates check
     const seen = new Set<string>()
     for (const r of reminders) {
       const key = getReminderComparisonKey(r, !isAllDay, eventLocalStart)
@@ -181,8 +189,6 @@ export function CreateEventDialog({
       }
       seen.add(key)
     }
-
-    // Relative validation for timed events
     if (!isAllDay) {
       for (const r of reminders) {
         if (r.mode === "custom" && typeof r.customMinutes === "number") {
@@ -194,7 +200,6 @@ export function CreateEventDialog({
         }
       }
     }
-
     return true
   }
 
@@ -308,7 +313,6 @@ export function CreateEventDialog({
                   key={idx}
                   value={r}
                   isAllDay={isAllDay}
-                  eventLocalStart={eventLocalStart}
                   onChangeAction={(v) => updateReminderAt(idx, v)}
                   onDeleteAction={() => deleteReminderAt(idx)}
                   expandWhenOnDesktop

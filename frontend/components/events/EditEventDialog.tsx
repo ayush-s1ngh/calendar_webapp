@@ -20,7 +20,6 @@ import { getErrorMessage } from "@/lib/errors"
 import { EventBasicsFields } from "./EventBasicsFields"
 import { eventSchema, type EventFormValues, type EventData } from "./event-utils"
 
-// Reminders
 import {
   ReminderFormValue,
   ReminderFormRow,
@@ -37,6 +36,7 @@ import {
   allDayPresetToMinutesBefore,
   roundToNearestFiveMinutes,
   minutesToTimedPreset,
+  fetchRemindersForEvent,
   type AllDayPreset,
   type TimedPreset,
 } from "@/components/reminders"
@@ -45,34 +45,6 @@ type ReminderPayload = {
   minutes_before?: number
   reminder_time?: string
   notification_type: NotificationType
-}
-
-// Centralized fetcher for event reminders (shape-tolerant, no any)
-async function fetchRemindersForEvent(eventId: string | number): Promise<ApiReminder[]> {
-  try {
-    const res = await api.get(`/reminders/event/${encodeURIComponent(String(eventId))}/reminders`)
-    const root = res?.data as unknown
-
-    if (Array.isArray(root)) return root as ApiReminder[]
-    if (root && typeof root === "object") {
-      const obj = root as Record<string, unknown>
-      const fromKey = (key: string): ApiReminder[] => {
-        const val = obj[key]
-        return Array.isArray(val) ? (val as ApiReminder[]) : []
-      }
-      if (Array.isArray(obj.reminders)) return obj.reminders as ApiReminder[]
-      if (Array.isArray(obj.data)) return obj.data as ApiReminder[]
-      if (obj.data && typeof obj.data === "object") {
-        const dataObj = obj.data as Record<string, unknown>
-        if (Array.isArray(dataObj.reminders)) return dataObj.reminders as ApiReminder[]
-      }
-      const attempts = fromKey("reminders") || fromKey("data")
-      if (attempts.length) return attempts
-    }
-    return []
-  } catch {
-    return []
-  }
 }
 
 export function EditEventDialog({
@@ -101,13 +73,11 @@ export function EditEventDialog({
     resolver: zodResolver(eventSchema),
   })
 
-  // Reminders local state
   const [reminders, setReminders] = React.useState<ReminderFormValue[]>([])
   const [originalApiReminders, setOriginalApiReminders] = React.useState<ApiReminder[]>([])
   const [remindersLoading, setRemindersLoading] = React.useState(false)
   const [manageOpen, setManageOpen] = React.useState(false)
 
-  // Load event details into form and fetch reminders
   React.useEffect(() => {
     async function init() {
       if (!open || !event) return
@@ -130,7 +100,6 @@ export function EditEventDialog({
         category_ids: event.categories?.map((c) => c.id) || [],
       })
 
-      // Compute local event start for mapping presets and minutes
       const eventLocalStartForMapping = (() => {
         if (isAllDay) {
           const d = new Date(startDate)
@@ -160,7 +129,6 @@ export function EditEventDialog({
   const startDate = watch("start_date")
   const startTime = watch("start_time")
 
-  // Compute event's local start Date for reminder calculations
   const eventLocalStart = React.useMemo(() => {
     if (isAllDay) {
       const d = new Date(startDate || new Date())
@@ -174,7 +142,6 @@ export function EditEventDialog({
     }
   }, [isAllDay, startDate, startTime])
 
-  // Convert reminders when toggling event type
   const prevIsAllDayRef = React.useRef<boolean | null>(null)
   React.useEffect(() => {
     if (prevIsAllDayRef.current === null) {
@@ -200,80 +167,36 @@ export function EditEventDialog({
   ): ReminderFormValue[] {
     return apiRems.map((rem) => {
       if (isAllDayEvent) {
-        // Prefer mapping to preset if recognizable
         if (rem.is_relative && typeof rem.minutes_before === "number") {
           const m = Math.max(0, Math.floor(rem.minutes_before))
           const p = detectAllDayPresetFromMinutesBefore(m)
           if (p) {
-            return {
-              id: rem.id,
-              mode: "preset",
-              preset: p,
-              notificationType: rem.notification_type,
-            }
+            return { id: rem.id, mode: "preset", preset: p, notificationType: rem.notification_type }
           }
-          // Fall back: show as custom absolute derived from minutes
           const abs = new Date(eventLocalStartForMapping.getTime() - m * 60000)
-          return {
-            id: rem.id,
-            mode: "custom",
-            customDateTime: abs,
-            notificationType: rem.notification_type,
-          }
+          return { id: rem.id, mode: "custom", customDateTime: abs, notificationType: rem.notification_type }
         }
 
         if (rem.reminder_time) {
           const absLocal = new Date(rem.reminder_time)
           const preset = detectAllDayPresetFromAbsolute(absLocal, eventLocalStartForMapping)
           if (preset) {
-            return {
-              id: rem.id,
-              mode: "preset",
-              preset,
-              notificationType: rem.notification_type,
-            }
+            return { id: rem.id, mode: "preset", preset, notificationType: rem.notification_type }
           }
-          return {
-            id: rem.id,
-            mode: "custom",
-            customDateTime: absLocal,
-            notificationType: rem.notification_type,
-          }
+          return { id: rem.id, mode: "custom", customDateTime: absLocal, notificationType: rem.notification_type }
         }
 
-        // Fallback default
-        return {
-          id: rem.id,
-          mode: "preset",
-          preset: "day_1_before_9am",
-          notificationType: rem.notification_type,
-        }
+        return { id: rem.id, mode: "preset", preset: "day_1_before_9am", notificationType: rem.notification_type }
       } else {
         const m = typeof rem.minutes_before === "number" ? rem.minutes_before : undefined
         if (typeof m === "number") {
           const preset = minutesToTimedPreset(m)
           if (preset) {
-            return {
-              id: rem.id,
-              mode: "preset",
-              preset,
-              notificationType: rem.notification_type,
-            }
+            return { id: rem.id, mode: "preset", preset, notificationType: rem.notification_type }
           }
-          return {
-            id: rem.id,
-            mode: "custom",
-            customMinutes: Math.max(0, Math.floor(m)),
-            notificationType: rem.notification_type,
-          }
+          return { id: rem.id, mode: "custom", customMinutes: Math.max(0, Math.floor(m)), notificationType: rem.notification_type }
         }
-        // Fallback to "at_start"
-        return {
-          id: rem.id,
-          mode: "preset",
-          preset: "at_start",
-          notificationType: rem.notification_type,
-        }
+        return { id: rem.id, mode: "preset", preset: "at_start", notificationType: rem.notification_type }
       }
     })
   }
@@ -341,7 +264,6 @@ export function EditEventDialog({
     return true
   }
 
-  // Build the expected API shape from a form reminder (for equality checks and API calls)
   function expectedFromForm(
     r: ReminderFormValue,
     opts: { isAllDay: boolean; eventLocalStart: Date }
@@ -479,7 +401,6 @@ export function EditEventDialog({
         end_datetime = localDateToUtcIso(endD)
       }
 
-      // Update event fields only
       const payload: {
         title: string
         description?: string
@@ -498,7 +419,6 @@ export function EditEventDialog({
 
       await api.put(`/events/${encodeURIComponent(String(event.id))}`, payload)
 
-      // Now sync reminders via dedicated endpoints
       const res = await syncReminders(event.id)
       if (!res.ok) {
         toast.warning("Event updated, but reminders could not be fully synced. Please retry.")
@@ -543,7 +463,6 @@ export function EditEventDialog({
             disabled={isSubmitting}
           />
 
-          {/* Reminders Section (summary + manage) */}
           <div className="mt-2 border rounded-md">
             <div className="flex items-center justify-between px-3 py-2">
               <div className="text-sm font-medium">
@@ -589,7 +508,6 @@ export function EditEventDialog({
                       key={r.id ?? idx}
                       value={r}
                       isAllDay={isAllDay}
-                      eventLocalStart={eventLocalStart}
                       onChangeAction={(v) => updateReminderAt(idx, v)}
                       onDeleteAction={() => deleteReminderAt(idx)}
                     />

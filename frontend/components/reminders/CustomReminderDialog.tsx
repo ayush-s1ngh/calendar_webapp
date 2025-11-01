@@ -1,5 +1,9 @@
 "use client"
 
+/**
+ * Dialog for entering custom minutes-before for timed events.
+ * - Clamps to non-negative, integer minutes (step 5)
+ */
 import * as React from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"

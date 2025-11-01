@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { addDays, format, isSameDay } from "date-fns"
-import { Calendar as CalendarIcon, ChevronDown, ChevronUp, Clock, Mail, Smartphone, MessageCircle } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronDown, ChevronUp, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -16,7 +16,8 @@ import type { EventData } from "@/components/events"
 import {
   ApiReminder,
   getReminderLocalTriggerDate,
-  NotificationType,
+  fetchRemindersForEvent,
+  ReminderTypeIcon,
 } from "@/components/reminders"
 import { ViewEventDialog } from "@/components/events/ViewEventDialog"
 import { EditEventDialog } from "@/components/events/EditEventDialog"
@@ -47,26 +48,6 @@ function extractEventsUnknown(root: unknown): EventData[] {
   return []
 }
 
-async function fetchEventReminders(eventId: string | number): Promise<ApiReminder[]> {
-  try {
-    const res = await api.get(`/reminders/event/${encodeURIComponent(String(eventId))}/reminders`)
-    const d = res?.data
-    if (Array.isArray(d)) return d as ApiReminder[]
-    if (Array.isArray(d?.reminders)) return d.reminders as ApiReminder[]
-    if (Array.isArray(d?.data)) return d.data as ApiReminder[]
-    if (Array.isArray(d?.data?.reminders)) return d.data.reminders as ApiReminder[]
-    return []
-  } catch {
-    return []
-  }
-}
-
-function TypeIcon({ type, className }: { type: NotificationType; className?: string }) {
-  if (type === "email") return <Mail className={className ?? "size-4"} />
-  if (type === "push") return <Smartphone className={className ?? "size-4"} />
-  return <MessageCircle className={className ?? "size-4"} />
-}
-
 type ErrorLike = { response?: { data?: { message?: string } } }
 function getMessage(err: unknown, fallback: string) {
   return (err as ErrorLike)?.response?.data?.message ?? fallback
@@ -78,10 +59,8 @@ export function SidebarReminders() {
   const [error, setError] = React.useState<string | null>(null)
   const [groups, setGroups] = React.useState<EventWithReminders[]>([])
   const [stale, setStale] = React.useState(false)
-  // NEW: track if we've already attempted a load to avoid infinite loops when there are no reminders
   const [loadedOnce, setLoadedOnce] = React.useState(false)
 
-  // Dialogs
   const [viewOpen, setViewOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [activeEvent, setActiveEvent] = React.useState<EventData | null>(null)
@@ -89,7 +68,6 @@ export function SidebarReminders() {
   const nowRef = React.useRef(new Date())
   const rangeNow = nowRef.current
   const rangeEnd = React.useMemo(() => addDays(rangeNow, 30), [rangeNow])
-  // Fetch a little beyond 30d so we catch reminders that are "X before" for events slightly outside the 30d window
   const eventsFetchEnd = React.useMemo(() => addDays(rangeNow, 45), [rangeNow])
 
   const withinWindowOrPastToday = React.useCallback(
@@ -106,7 +84,7 @@ export function SidebarReminders() {
     setLoading(true)
     setError(null)
     setStale(false)
-    setLoadedOnce(true) // mark attempt immediately to prevent re-trigger loop on empty results
+    setLoadedOnce(true)
     try {
       const res = await api.get("/events", {
         params: {
@@ -120,14 +98,11 @@ export function SidebarReminders() {
 
       const results: EventWithReminders[] = []
       for (const ev of events) {
-        const reminders = await fetchEventReminders(ev.id)
+        const reminders = await fetchRemindersForEvent(ev.id)
         if (!reminders.length) continue
 
         const withTriggers = reminders
-          .map((r) => {
-            const trigger = getReminderLocalTriggerDate(r, ev.start_datetime)
-            return { r, trigger }
-          })
+          .map((r) => ({ r, trigger: getReminderLocalTriggerDate(r, ev.start_datetime) }))
           .filter(({ trigger }) => withinWindowOrPastToday(trigger))
           .sort((a, b) => a.trigger.getTime() - b.trigger.getTime())
 
@@ -151,14 +126,12 @@ export function SidebarReminders() {
     }
   }, [eventsFetchEnd, rangeNow, withinWindowOrPastToday])
 
-  // Lazy load: only on first open, or when stale flag is set.
   React.useEffect(() => {
     if (open && !loading && (stale || !loadedOnce)) {
       void load()
     }
   }, [open, loading, stale, loadedOnce, load])
 
-  // Auto refresh signal
   React.useEffect(() => {
     const handler: EventListener = () => {
       if (open) {
@@ -266,23 +239,19 @@ export function SidebarReminders() {
                         key={String(g.event.id)}
                         className="relative rounded-md border p-3 hover:bg-accent/50 transition-colors"
                       >
-                        {/* Category color strip */}
                         <div
                           className="absolute left-0 top-0 bottom-0 w-1 rounded-l-md"
                           style={{ background: color }}
                         />
-                        {/* Clickable area for opening View dialog */}
                         <button
                           className="text-left w-full"
                           onClick={() => openView(g.event)}
                           aria-label={`Open event ${g.event.title}`}
                           title="Open event"
                         >
-                        {/* Top row: Title */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="text-sm font-medium truncate pr-8">{g.event.title}</div>
                           </div>
-                          {/* Second row: Event Date (left) | Event Time (right) */}
                           <div className="text-xs text-muted-foreground mt-1 flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1">
                               <CalendarIcon className="size-3" />
@@ -294,14 +263,13 @@ export function SidebarReminders() {
                             </div>
                           </div>
 
-                          {/* Reminders list: bullet + exact date/time | type icon */}
                           <div className="mt-2 space-y-1">
                             {remindersWithTrigger.map(({ r, trigger }) => (
                               <div key={r.id} className="text-xs flex items-center justify-between gap-2">
                                 <span className="text-muted-foreground">
                                   • {formatReminderExact(trigger)}
                                 </span>
-                                <TypeIcon type={r.notification_type} className="size-4 text-muted-foreground" />
+                                <ReminderTypeIcon type={r.notification_type} className="size-4 text-muted-foreground" />
                               </div>
                             ))}
                           </div>
@@ -316,7 +284,6 @@ export function SidebarReminders() {
         </Collapsible>
       </SidebarGroup>
 
-      {/* View Event Dialog */}
       <ViewEventDialog
         open={viewOpen}
         onOpenChangeAction={setViewOpen}
@@ -332,7 +299,6 @@ export function SidebarReminders() {
         }}
       />
 
-      {/* Edit Event Dialog */}
       <EditEventDialog
         open={editOpen}
         onOpenChangeAction={setEditOpen}

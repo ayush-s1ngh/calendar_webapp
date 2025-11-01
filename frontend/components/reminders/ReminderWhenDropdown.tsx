@@ -1,5 +1,12 @@
 "use client"
 
+/**
+ * Dropdown for choosing when a reminder should trigger.
+ * - Provides timed and all-day presets
+ * - Closes on selection
+ * - Uses shared formatter for current label
+ */
+import { JSX } from "react"
 import * as React from "react"
 import {
   DropdownMenu,
@@ -10,65 +17,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { ChevronDown, CalendarClock } from "lucide-react"
-import { format } from "date-fns"
-import {
-  ReminderFormValue,
-  ReminderFormMode,
-  TimedPreset,
-  AllDayPreset,
-  DEFAULT_ALL_DAY_HOUR,
-} from "@/components/reminders"
+import { formatReminderFormValueLabel, ReminderFormValue, ReminderFormMode, TimedPreset, AllDayPreset, DEFAULT_ALL_DAY_HOUR } from "@/components/reminders"
 import { cn } from "@/lib/utils"
-
-function labelForTimedPreset(p: TimedPreset) {
-  switch (p) {
-    case "at_start":
-      return "At event start"
-    case "min_5":
-      return "5 minutes before"
-    case "min_10":
-      return "10 minutes before"
-    case "min_15":
-      return "15 minutes before"
-    case "min_30":
-      return "30 minutes before"
-    case "hr_1":
-      return "1 hour before"
-  }
-}
-
-function labelForAllDayPreset(p: AllDayPreset) {
-  switch (p) {
-    case "same_day_9am":
-      return `On event day at ${DEFAULT_ALL_DAY_HOUR}:00`
-    case "day_1_before_9am":
-      return `1 day before at ${DEFAULT_ALL_DAY_HOUR}:00`
-    case "day_2_before_9am":
-      return `2 days before at ${DEFAULT_ALL_DAY_HOUR}:00`
-    case "week_1_before_9am":
-      return `1 week before at ${DEFAULT_ALL_DAY_HOUR}:00`
-  }
-}
-
-function currentLabel(v: ReminderFormValue, isAllDay: boolean) {
-  if (!isAllDay) {
-    if (v.mode === "preset" && v.preset) return labelForTimedPreset(v.preset as TimedPreset)
-    if (v.mode === "custom" && typeof v.customMinutes === "number") {
-      const m = Math.max(0, Math.floor(v.customMinutes))
-      if (m === 0) return "At event start"
-      if (m < 60) return `${m} minutes before`
-      const hrs = Math.floor(m / 60)
-      return `${hrs} hour${hrs > 1 ? "s" : ""} before`
-    }
-    return "Remind me..."
-  }
-
-  if (v.mode === "preset" && v.preset) return labelForAllDayPreset(v.preset as AllDayPreset)
-  if (v.mode === "custom" && v.customDateTime) {
-    return format(v.customDateTime, "EEE, MMM d, h:mm a")
-  }
-  return "Remind me..."
-}
 
 export function ReminderWhenDropdown({
   isAllDay,
@@ -77,7 +27,7 @@ export function ReminderWhenDropdown({
   onOpenCustomTimedAction,
   onOpenCustomAllDayAction,
   disabled,
-  grow = false, // NEW: allow trigger to expand on desktop
+  grow = false,
 }: {
   isAllDay: boolean
   value: ReminderFormValue
@@ -86,7 +36,7 @@ export function ReminderWhenDropdown({
   onOpenCustomAllDayAction?: () => void
   disabled?: boolean
   grow?: boolean
-}) {
+}): JSX.Element {
   const [open, setOpen] = React.useState(false)
 
   const selectPreset = (preset: TimedPreset | AllDayPreset) => {
@@ -98,13 +48,15 @@ export function ReminderWhenDropdown({
       customDateTime: undefined,
     }
     onChangeAction(next)
+    setOpen(false)
   }
 
   const triggerClasses = cn(
     "justify-between w-full",
-    // On desktop, either fixed width or grow to fill free space with a reasonable min width
     grow ? "md:min-w-[220px] md:flex-1" : "md:w-[220px] md:shrink-0"
   )
+
+  const label = formatReminderFormValueLabel(isAllDay, value)
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -117,7 +69,7 @@ export function ReminderWhenDropdown({
           aria-label="Select reminder time"
         >
           <CalendarClock className="size-4" />
-          <span className="truncate">{currentLabel(value, isAllDay)}</span>
+          <span className="truncate">{label}</span>
           <ChevronDown className="size-4 opacity-70" />
         </Button>
       </DropdownMenuTrigger>
@@ -146,6 +98,7 @@ export function ReminderWhenDropdown({
             <DropdownMenuItem
               onSelect={(e) => {
                 e.preventDefault()
+                setOpen(false)
                 onOpenCustomTimedAction?.()
               }}
             >
@@ -167,6 +120,7 @@ export function ReminderWhenDropdown({
             <DropdownMenuItem
               onSelect={(e) => {
                 e.preventDefault()
+                setOpen(false)
                 onOpenCustomAllDayAction?.()
               }}
             >

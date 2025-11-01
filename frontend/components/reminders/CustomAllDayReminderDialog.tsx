@@ -1,5 +1,10 @@
 "use client"
 
+/**
+ * Dialog for picking an absolute date/time for all-day events.
+ * - Merges date + time, normalizes seconds/millis to 0
+ * - Resets state when opened with new initialDateTime
+ */
 import * as React from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"

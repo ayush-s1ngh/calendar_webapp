@@ -27,43 +27,13 @@ import {
   Pencil,
   Trash2,
   Tag,
-  Mail,
-  Smartphone,
-  MessageCircle,
 } from "lucide-react"
 import api from "@/lib/api"
 import { format, isSameDay } from "date-fns"
 import { utcIsoToLocalDate } from "@/lib/time"
 import { getErrorMessage } from "@/lib/errors"
 import type { EventData } from "./event-utils"
-import { ApiReminder, getReminderLocalTriggerDate } from "@/components/reminders"
-
-function TypeIcon({ type, className }: { type: "email" | "push" | "sms"; className?: string }) {
-  if (type === "email") return <Mail className={className ?? "size-4"} />
-  if (type === "push") return <Smartphone className={className ?? "size-4"} />
-  return <MessageCircle className={className ?? "size-4"} />
-}
-
-// Centralized fetcher for event reminders (shape-tolerant, no any)
-async function fetchRemindersForEvent(eventId: string | number): Promise<ApiReminder[]> {
-  try {
-    const res = await api.get(`/reminders/event/${encodeURIComponent(String(eventId))}/reminders`)
-    const d = res?.data as unknown
-    if (Array.isArray(d)) return d as ApiReminder[]
-    if (d && typeof d === "object") {
-      const obj = d as Record<string, unknown>
-      if (Array.isArray(obj.reminders)) return obj.reminders as ApiReminder[]
-      if (Array.isArray(obj.data)) return obj.data as ApiReminder[]
-      if (obj.data && typeof obj.data === "object") {
-        const inner = obj.data as Record<string, unknown>
-        if (Array.isArray(inner.reminders)) return inner.reminders as ApiReminder[]
-      }
-    }
-    return []
-  } catch {
-    return []
-  }
-}
+import { ApiReminder, getReminderLocalTriggerDate, fetchRemindersForEvent, ReminderTypeIcon } from "@/components/reminders"
 
 export function ViewEventDialog({
   open,
@@ -78,16 +48,13 @@ export function ViewEventDialog({
   onEditClickAction?: () => void
   onDeletedAction?: () => void
 }): JSX.Element | null {
-  // Keep hooks in a stable order across renders
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
 
-  // Reminders state
   const [reminders, setReminders] = React.useState<ApiReminder[] | null>(null)
   const [remindersError, setRemindersError] = React.useState<string | null>(null)
   const [remindersLoading, setRemindersLoading] = React.useState(false)
 
-  // Load reminders when dialog opens (guard logic inside; hook always runs)
   React.useEffect(() => {
     let cancelled = false
     async function loadReminders(eventId: string | number) {
@@ -109,7 +76,6 @@ export function ViewEventDialog({
     if (open && event?.id != null) {
       void loadReminders(event.id)
     } else if (!open) {
-      // reset state when closing
       setReminders(null)
       setRemindersError(null)
       setRemindersLoading(false)
@@ -119,7 +85,6 @@ export function ViewEventDialog({
     }
   }, [open, event?.id])
 
-  // Derived values as hooks (safe when event is null)
   const startDate = React.useMemo(
     () => (event ? utcIsoToLocalDate(event.start_datetime) : null),
     [event]
@@ -167,7 +132,6 @@ export function ViewEventDialog({
     }
   }
 
-  // After hooks, it is safe to early return
   if (!event) return null
 
   const primaryCategory = event.categories?.[0]
@@ -250,7 +214,6 @@ export function ViewEventDialog({
               </div>
             )}
 
-            {/* Reminders section */}
             <div className="space-y-2">
               <div className="text-sm font-medium">
                 Reminders
@@ -277,7 +240,7 @@ export function ViewEventDialog({
                   {formattedReminders.map(({ r, trigger }) => (
                     <div key={r.id} className="text-xs flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">• {fmtExact(trigger)}</span>
-                      <TypeIcon type={r.notification_type} className="size-4 text-muted-foreground" />
+                      <ReminderTypeIcon type={r.notification_type} className="size-4 text-muted-foreground" />
                     </div>
                   ))}
                 </div>

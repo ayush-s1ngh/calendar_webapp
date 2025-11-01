@@ -1,12 +1,16 @@
 "use client"
 
+/**
+ * Single reminder row with:
+ * - When dropdown (timed/all-day presets and custom)
+ * - How dropdown (notification type)
+ * - Edit/Delete actions
+ */
 import * as React from "react"
+import { JSX } from "react"
 import { Button } from "@/components/ui/button"
 import { Trash2, Pencil } from "lucide-react"
-import {
-  ReminderFormValue,
-  ReminderFormMode,
-} from "@/components/reminders"
+import { ReminderFormValue, ReminderFormMode } from "@/components/reminders"
 import { ReminderWhenDropdown } from "./ReminderWhenDropdown"
 import { ReminderHowDropdown } from "./ReminderHowDropdown"
 import { CustomReminderDialog } from "./CustomReminderDialog"
@@ -16,20 +20,18 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 export function ReminderFormRow({
   value,
   isAllDay,
-  eventLocalStart,
   onChangeAction,
   onDeleteAction,
   disabled,
-  expandWhenOnDesktop = false, // NEW: opt-in expansion for "When" trigger
+  expandWhenOnDesktop = false,
 }: {
   value: ReminderFormValue
   isAllDay: boolean
-  eventLocalStart: Date
   onChangeAction: (v: ReminderFormValue) => void
   onDeleteAction: () => void
   disabled?: boolean
   expandWhenOnDesktop?: boolean
-}) {
+}): JSX.Element {
   const [openCustomTimed, setOpenCustomTimed] = React.useState(false)
   const [openCustomAllDay, setOpenCustomAllDay] = React.useState(false)
 
@@ -56,7 +58,6 @@ export function ReminderFormRow({
   return (
     <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 rounded-md border bg-card/60 px-3 py-2">
       <div className="flex-1 flex flex-col sm:flex-row gap-2">
-        {/* When (can expand on desktop if requested by parent) */}
         <ReminderWhenDropdown
           isAllDay={isAllDay}
           value={value}
@@ -66,7 +67,6 @@ export function ReminderFormRow({
           disabled={disabled}
           grow={expandWhenOnDesktop}
         />
-        {/* How (fixed width from md+) */}
         <ReminderHowDropdown
           value={value.notificationType}
           onChange={(t) => onChangeAction({ ...value, notificationType: t })}

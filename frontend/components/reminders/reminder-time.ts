@@ -1,5 +1,7 @@
-"use client"
-
+/* Pure reminder utilities (no client-only APIs).
+   - Holds types, presets, formatting, date math, and comparison helpers
+   - Safe to import in server and client components
+*/
 import {
   addDays,
   addMinutes,
@@ -13,7 +15,6 @@ import {
   startOfDay,
 } from "date-fns"
 import { localDateToUtcIso } from "@/lib/time"
-import api from "@/lib/api"
 
 export type NotificationType = "email" | "push" | "sms"
 
@@ -102,6 +103,21 @@ export function allDayPresetToLocalDate(
   }
 }
 
+/**
+ * Calculate minutes_before for an all-day preset relative to the event's local start (midnight).
+ * Returns >= 0. "same_day_9am" returns 0 (after event start); callers should use absolute for that preset.
+ */
+export function allDayPresetToMinutesBefore(
+  eventLocalStart: Date,
+  preset: AllDayPreset,
+  defaultHour = DEFAULT_ALL_DAY_HOUR
+): number {
+  const target = allDayPresetToLocalDate(eventLocalStart, preset, defaultHour)
+  const diffMs = eventLocalStart.getTime() - target.getTime()
+  const minutes = Math.floor(diffMs / 60000)
+  return Math.max(0, minutes)
+}
+
 export function calculateAbsoluteReminderTime(
   eventLocalDate: Date,
   preset?: AllDayPreset,
@@ -115,24 +131,7 @@ export function calculateAbsoluteReminderTime(
 }
 
 /**
- * Calculate minutes_before for an all-day preset relative to the event's local start (midnight).
- * Returns >= 0. Note: "same_day_9am" will produce 0 (since it's after start); callers should
- * decide to NOT use minutes for same-day and use absolute instead.
- */
-export function allDayPresetToMinutesBefore(
-  eventLocalStart: Date,
-  preset: AllDayPreset,
-  defaultHour = DEFAULT_ALL_DAY_HOUR
-): number {
-  const target = allDayPresetToLocalDate(eventLocalStart, preset, defaultHour)
-  const diffMs = eventLocalStart.getTime() - target.getTime()
-  const minutes = Math.floor(diffMs / 60000)
-  return Math.max(0, minutes)
-}
-
-/**
- * Detect if an absolute reminder matches one of our supported all-day presets
- * relative to the event's local start date.
+ * Detect if an absolute reminder matches a supported all-day preset.
  */
 export function detectAllDayPresetFromAbsolute(
   reminderLocal: Date,
@@ -149,7 +148,7 @@ export function detectAllDayPresetFromAbsolute(
 
   const base = startOfDay(eventLocalStart)
   const rDay = startOfDay(reminderLocal)
-  const diff = differenceInDays(base, rDay) // how many days before event start
+  const diff = differenceInDays(base, rDay)
 
   if (diff === 0) return "same_day_9am"
   if (diff === 1) return "day_1_before_9am"
@@ -159,11 +158,10 @@ export function detectAllDayPresetFromAbsolute(
 }
 
 /**
- * Detect if a minutes_before value matches one of our all-day presets
- * (assuming default 9:00 AM for reminder).
- * 1 day before @9 → 1440 - 540 = 900
- * 2 days before @9 → 2880 - 540 = 2340
- * 1 week before @9 → 10080 - 540 = 9540
+ * Detect if minutes_before matches one of our all-day presets (assuming default 9:00).
+ * 1 day @9 → 1440 - 540 = 900
+ * 2 days @9 → 2880 - 540 = 2340
+ * 1 week @9 → 10080 - 540 = 9540
  */
 export function detectAllDayPresetFromMinutesBefore(
   minutes: number,
@@ -191,7 +189,6 @@ export function buildReminderPayloadFromForm(
   return reminders
     .map((r) => {
       if (isAllDay) {
-        // Custom absolute: prefer relative minutes if it's before event start; else absolute
         if (r.mode === "custom" && r.customDateTime) {
           const custom = new Date(r.customDateTime)
           if (custom.getTime() < eventLocalStart.getTime()) {
@@ -199,44 +196,25 @@ export function buildReminderPayloadFromForm(
               0,
               Math.floor((eventLocalStart.getTime() - custom.getTime()) / 60000)
             )
-            return {
-              minutes_before: diffMin,
-              notification_type: r.notificationType,
-            } as ReminderCreatePayload
+            return { minutes_before: diffMin, notification_type: r.notificationType }
           }
-          return {
-            reminder_time: localDateToUtcIso(custom),
-            notification_type: r.notificationType,
-          } as ReminderCreatePayload
+          return { reminder_time: localDateToUtcIso(custom), notification_type: r.notificationType }
         }
-
-        // Presets: send minutes_before for presets that are before event start.
         const preset = (r.preset as AllDayPreset | undefined) ?? "day_1_before_9am"
         if (preset === "same_day_9am") {
-          // same-day 9am is after midnight (event start) => must be absolute
           return {
             reminder_time: calculateAbsoluteReminderTime(eventLocalStart, preset),
             notification_type: r.notificationType,
-          } as ReminderCreatePayload
+          }
         }
         const minutes = allDayPresetToMinutesBefore(eventLocalStart, preset)
-        return {
-          minutes_before: minutes,
-          notification_type: r.notificationType,
-        } as ReminderCreatePayload
+        return { minutes_before: minutes, notification_type: r.notificationType }
       } else {
-        // Timed events: always relative minutes
         if (r.mode === "custom" && typeof r.customMinutes === "number") {
-          return {
-            minutes_before: Math.max(0, Math.floor(r.customMinutes)),
-            notification_type: r.notificationType,
-          } as ReminderCreatePayload
+          return { minutes_before: Math.max(0, Math.floor(r.customMinutes)), notification_type: r.notificationType }
         }
         const preset = (r.preset as TimedPreset | undefined) ?? "at_start"
-        return {
-          minutes_before: presetToMinutes(preset),
-          notification_type: r.notificationType,
-        } as ReminderCreatePayload
+        return { minutes_before: presetToMinutes(preset), notification_type: r.notificationType }
       }
     })
     .filter(Boolean) as ReminderCreatePayload[]
@@ -323,6 +301,10 @@ export function formatNotificationTypeLabel(type: NotificationType): string {
   }
 }
 
+/**
+ * Round a Date to the nearest 5 minutes.
+ * Note: values >= :57 round down to :55 (no hour roll-over). Documented behavior.
+ */
 export function roundToNearestFiveMinutes(date: Date): Date {
   const d = new Date(date)
   const minutes = d.getMinutes()
@@ -348,18 +330,50 @@ export function getReminderLocalTriggerDate(reminder: ApiReminder, eventStartUtc
 }
 
 /**
- * Fetch reminders for an event id while tolerating various API envelope shapes.
+ * Format a ReminderFormValue for UI labels in dropdowns/summaries.
  */
-export async function fetchRemindersForEvent(eventId: string | number): Promise<ApiReminder[]> {
-  try {
-    const res = await api.get(`/reminders/event/${encodeURIComponent(String(eventId))}/reminders`)
-    const d = res?.data
-    if (Array.isArray(d)) return d as ApiReminder[]
-    if (Array.isArray(d?.reminders)) return d.reminders as ApiReminder[]
-    if (Array.isArray(d?.data)) return d.data as ApiReminder[]
-    if (Array.isArray(d?.data?.reminders)) return d.data.reminders as ApiReminder[]
-    return []
-  } catch {
-    return []
+export function formatReminderFormValueLabel(isAllDay: boolean, v: ReminderFormValue): string {
+  if (!isAllDay) {
+    if (v.mode === "preset" && v.preset) {
+      switch (v.preset as TimedPreset) {
+        case "at_start":
+          return "At event start"
+        case "min_5":
+          return "5 minutes before"
+        case "min_10":
+          return "10 minutes before"
+        case "min_15":
+          return "15 minutes before"
+        case "min_30":
+          return "30 minutes before"
+        case "hr_1":
+          return "1 hour before"
+      }
+    }
+    if (v.mode === "custom" && typeof v.customMinutes === "number") {
+      const m = Math.max(0, Math.floor(v.customMinutes))
+      if (m === 0) return "At event start"
+      if (m < 60) return `${m} minutes before`
+      const hrs = Math.floor(m / 60)
+      return `${hrs} hour${hrs > 1 ? "s" : ""} before`
+    }
+    return "Remind me..."
   }
+
+  if (v.mode === "preset" && v.preset) {
+    switch (v.preset as AllDayPreset) {
+      case "same_day_9am":
+        return `On event day at ${DEFAULT_ALL_DAY_HOUR}:00`
+      case "day_1_before_9am":
+        return `1 day before at ${DEFAULT_ALL_DAY_HOUR}:00`
+      case "day_2_before_9am":
+        return `2 days before at ${DEFAULT_ALL_DAY_HOUR}:00`
+      case "week_1_before_9am":
+        return `1 week before at ${DEFAULT_ALL_DAY_HOUR}:00`
+    }
+  }
+  if (v.mode === "custom" && v.customDateTime) {
+    return format(v.customDateTime, "EEE, MMM d, h:mm a")
+  }
+  return "Remind me..."
 }
